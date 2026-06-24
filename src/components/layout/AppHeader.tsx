@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { Search, Plus, Users, Building2, Handshake, ClipboardList } from "lucide-react";
+import { Plus, Users, Building2, Handshake, ClipboardList } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,11 +21,7 @@ const routeLabels: Record<string, string> = {
   "/settings": "Configurações",
 };
 
-interface AppHeaderProps {
-  onOpenSearch: () => void;
-}
-
-export function AppHeader({ onOpenSearch }: AppHeaderProps) {
+export function AppHeader() {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -86,15 +82,6 @@ export function AppHeader({ onOpenSearch }: AppHeaderProps) {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        <button
-          type="button"
-          onClick={onOpenSearch}
-          aria-label="Buscar"
-          className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-accent sm:w-64"
-        >
-          <Search className="h-4 w-4" />
-          <span className="hidden sm:inline flex-1 text-left">Buscar...</span>
-        </button>
       </div>
     </header>
   );

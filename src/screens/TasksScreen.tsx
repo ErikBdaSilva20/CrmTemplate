@@ -18,7 +18,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Plus, Clock, AlertTriangle, Trash2, Edit2, MoreHorizontal, Search,
+  Plus, Clock, AlertTriangle, Trash2, Edit2, MoreHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -57,7 +57,6 @@ export default function TasksScreen() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [dateFilter, setDateFilter] = useState<DateFilter>("todo");
-  const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState<Activity | null>(null);
 
@@ -107,14 +106,6 @@ export default function TasksScreen() {
     const thisWeek = getWeekRange();
 
     return tasks.filter((t) => {
-      if (search) {
-        const q = search.toLowerCase();
-        const contact = getContact(t.contact_id);
-        const deal = getDeal(t.deal_id);
-        const haystack = `${t.title} ${contact?.first_name || ""} ${contact?.last_name || ""} ${deal?.title || ""}`.toLowerCase();
-        if (!haystack.includes(q)) return false;
-      }
-
       const dueDate = t.due_date ? new Date(t.due_date) : null;
       switch (dateFilter) {
         case "todo":
@@ -132,7 +123,7 @@ export default function TasksScreen() {
       }
       return true;
     });
-  }, [tasks, dateFilter, search, contacts, deals]);
+  }, [tasks, dateFilter, contacts, deals]);
 
   const counts = useMemo(() => {
     const now = new Date();
@@ -215,21 +206,6 @@ export default function TasksScreen() {
         <Button onClick={openCreate} size="sm">
           <Plus className="mr-1.5 h-3.5 w-3.5" />Tarefa
         </Button>
-      </div>
-
-      {/* Search bar */}
-      <div className="flex items-center gap-1 pb-2 border-b border-border flex-wrap">
-        <div className="ml-auto flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-            <Input
-              placeholder="Buscar..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-7 h-7 w-44 text-xs"
-            />
-          </div>
-        </div>
       </div>
 
       {/* Date filter tabs */}

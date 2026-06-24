@@ -17,7 +17,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Plus, Search, LayoutGrid, List, Filter, ArrowUpDown, Upload, Download,
+  Plus, LayoutGrid, List, Filter, ArrowUpDown, Upload, Download,
   Trash2, ChevronLeft, ChevronRight, X, AlertTriangle, Columns3, Bookmark,
 } from "lucide-react";
 import {
@@ -61,7 +61,6 @@ interface ContactFilters {
 export default function ContactsScreen() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -129,14 +128,13 @@ export default function ContactsScreen() {
   const filtered = useMemo(() => {
     return contacts.filter((c) => {
       const searchStr = `${c.first_name} ${c.last_name} ${c.email}`.toLowerCase();
-      if (search && !searchStr.includes(search.toLowerCase())) return false;
-      if (filters.status && filters.status !== "all" && c.status !== filters.status) return false;
+if (filters.status && filters.status !== "all" && c.status !== filters.status) return false;
       if (filters.companyId && c.company_id !== filters.companyId) return false;
       if (filters.createdFrom && c.created_at && c.created_at < filters.createdFrom) return false;
       if (filters.createdTo && c.created_at && c.created_at > filters.createdTo) return false;
       return true;
     });
-  }, [contacts, search, filters]);
+  }, [contacts, filters]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -279,11 +277,6 @@ export default function ContactsScreen() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Buscar por nome, email..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
-      </div>
 
       {/* Filters */}
       {showFilters && (
