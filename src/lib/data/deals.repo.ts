@@ -1,0 +1,46 @@
+import { db } from "./client";
+import type { Database } from "./types.gen";
+import type { Contact } from "./contacts.repo";
+import type { Company } from "./companies.repo";
+
+export type Deal = Database["public"]["Tables"]["deals"]["Row"];
+export type DealInsert = Database["public"]["Tables"]["deals"]["Insert"];
+export type DealUpdate = Database["public"]["Tables"]["deals"]["Update"];
+
+// Deal "enriquecido" no front (não há join no modo genérico).
+export type DealWithRelations = Deal & {
+  contact?: Contact | null;
+  company?: Company | null;
+};
+
+export const listDeals = () => db.table<Deal>("deals").list();
+export const createDeal = (input: DealInsert) => db.table<Deal>("deals").create(input);
+export const updateDeal = (id: string, patch: DealUpdate) =>
+  db.table<Deal>("deals").update(id, patch);
+export const deleteDeal = (id: string) => db.table<Deal>("deals").remove(id);
+
+export const getDeal = async (id: string): Promise<Deal | null> =>
+  (await listDeals()).find((d) => d.id === id) ?? null;
+
+// Mover card no Kanban = só troca o stage_id.
+export const moveDealToStage = (id: string, stageId: string) =>
+  updateDeal(id, { stage_id: stageId });
+
+export const markDealWon = (id: string) => updateDeal(id, { status: "won" });
+export const markDealLost = (id: string, lossReason: string) =>
+  updateDeal(id, { status: "lost", loss_reason: lossReason });
+
+// Cruza deals + contacts + companies no front (substitui o join do Supabase).
+export function enrichDeals(
+  deals: Deal[],
+  contacts: Contact[],
+  companies: Company[],
+): DealWithRelations[] {
+  const cById = new Map(contacts.map((c) => [c.id, c]));
+  const coById = new Map(companies.map((c) => [c.id, c]));
+  return deals.map((d) => ({
+    ...d,
+    contact: d.contact_id ? cById.get(d.contact_id) ?? null : null,
+    company: d.company_id ? coById.get(d.company_id) ?? null : null,
+  }));
+}

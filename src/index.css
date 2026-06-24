@@ -1,0 +1,195 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Fundos */
+    --surface-1: 150 25% 97%;
+    --surface-2: 148 35% 92%;
+    --surface-3: 148 40% 89%;
+    --surface-raised: 0 0% 100%;
+  
+    /* Texto */
+    --background: var(--surface-1);
+    --foreground: 160 20% 18%;
+  
+    /* Cards */
+    --card: var(--surface-2);
+    --card-foreground: 160 20% 18%;
+  
+    /* Popovers */
+    --popover: 0 0% 100%;
+    --popover-foreground: 160 20% 18%;
+  
+    /* Verde principal */
+    --primary: 148 62% 36%;
+    --primary-foreground: 0 0% 100%;
+  
+    /* Neutros */
+    --secondary: 150 20% 95%;
+    --secondary-foreground: 160 20% 18%;
+  
+    --muted: 150 20% 94%;
+    --muted-foreground: 160 8% 40%;
+  
+    --accent: 148 30% 92%;
+    --accent-foreground: 160 20% 18%;
+  
+    /* Bordas verdes */
+    --border: 148 25% 75%;
+    --input: 148 20% 82%;
+    --ring: 148 62% 36%;
+  
+    /* Sidebar */
+    --sidebar-background: 148 30% 94%;
+    --sidebar-foreground: 160 20% 18%;
+    --sidebar-primary: 148 62% 36%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 148 25% 88%;
+    --sidebar-accent-foreground: 160 20% 18%;
+    --sidebar-border: 148 25% 75%;
+  }
+  .dark {
+    /* Superfícies claras */
+    --surface-1: 150 25% 97%;
+    --surface-2: 148 35% 92%;
+    --surface-3: 148 40% 89%;
+    --surface-raised: 148 35% 86%;
+    --surface-sidebar: 148 30% 94%;
+    --surface-accent: 148 35% 88%;
+  
+    /* Base */
+    --background: var(--surface-1);
+    --foreground: 155 20% 20%;
+  
+    --card: var(--surface-2);
+    --card-foreground: 155 20% 20%;
+  
+    --popover: var(--surface-3);
+    --popover-foreground: 155 20% 20%;
+  
+    /* Verde principal */
+    --primary: 148 62% 36%;
+    --primary-foreground: 0 0% 100%;
+  
+    /* Tons auxiliares */
+    --secondary: 150 20% 95%;
+    --secondary-foreground: 155 20% 20%;
+  
+    --muted: 150 18% 93%;
+    --muted-foreground: 155 8% 42%;
+  
+    --accent: 148 28% 88%;
+    --accent-foreground: 155 20% 20%;
+  
+    /* Estados */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+  
+    --success: 148 62% 36%;
+    --success-foreground: 0 0% 100%;
+  
+    --warning: 43 90% 48%;
+    --warning-foreground: 0 0% 100%;
+  
+    /* Bordas verdes */
+    --border: 148 25% 75%;
+    --input: 148 20% 82%;
+    --ring: 148 62% 36%;
+  
+    /* Sidebar */
+    --sidebar-background: var(--surface-sidebar);
+    --sidebar-foreground: 155 20% 20%;
+    --sidebar-primary: 148 62% 36%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 148 25% 88%;
+    --sidebar-accent-foreground: 155 20% 20%;
+    --sidebar-border: 148 25% 75%;
+    --sidebar-ring: 148 62% 36%;
+  
+    /* Destaques */
+    --accent-teal: 186 60% 45%;
+    --accent-gold: 43 90% 48%;
+  
+    /* Sombra leve */
+    --shadow-card:
+      0 2px 8px 0 hsl(148 20% 20% / 0.08),
+      0 1px 3px -1px hsl(148 20% 20% / 0.05);
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1, h2, h3, h4 { letter-spacing: -0.02em; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-ring; }
+  @media (max-width: 767px) {
+    .sidebar-open body { overflow: hidden; }
+  }
+}
+
+@layer utilities {
+  /* Backgrounds reutilizáveis — use estas classes em vez de bg-white/bg-gray-* */
+  .bg-surface-1      { background-color: hsl(var(--surface-1)); }
+  .bg-surface-2      { background-color: hsl(var(--surface-2)); }
+  .bg-surface-3      { background-color: hsl(var(--surface-3)); }
+  .bg-surface-raised { background-color: hsl(var(--surface-raised)); }
+  .bg-surface-accent { background-color: hsl(var(--surface-accent)); }
+
+  /* Dashboard hero — verde → ciano, muito sutil */
+  .dashboard-hero {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--primary) / 0.07) 0%,
+      hsl(var(--accent-teal) / 0.05) 55%,
+      hsl(var(--surface-1)) 100%
+    );
+    border-color: hsl(var(--primary) / 0.14);
+  }
+}
+
+/* Card shadow */
+.shadow-sm {
+  box-shadow: var(--shadow-card, 0 1px 2px 0 rgb(0 0 0 / 0.05));
+}
+
+/* Scrollbar kanban */
+.overflow-x-auto {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.2) transparent;
+}
+.overflow-x-auto::-webkit-scrollbar { height: 6px; }
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.2);
+  border-radius: 3px;
+}
+@media (max-width: 767px) {
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+  }
+  .overflow-x-auto > * { scroll-snap-align: start; }
+}
+
+/* Slide animations */
+@keyframes onboardingSlideLeft {
+  from { transform: translateX(30px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes onboardingSlideRight {
+  from { transform: translateX(-30px); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+.onboarding-slide-in {
+  animation-duration: 200ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
