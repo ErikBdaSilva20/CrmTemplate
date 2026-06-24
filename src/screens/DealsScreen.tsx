@@ -352,7 +352,7 @@ export default function DealsScreen() {
 
       {/* Create/Edit Sheet — sem "Responsável" (owner_id é do gateway) */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="overflow-y-auto">
+        <SheetContent className="w-full overflow-y-auto sm:w-[480px] sm:max-w-[480px]">
           <SheetHeader>
             <SheetTitle>{editing ? "Editar Negócio" : "Novo Negócio"}</SheetTitle>
             <SheetDescription>{editing ? "Atualize os dados do negócio" : "Preencha os dados do novo negócio"}</SheetDescription>
@@ -467,26 +467,26 @@ export default function DealsScreen() {
           </DialogHeader>
           <div className="space-y-3 max-h-[60vh] overflow-y-auto">
             {editingStages.map((stage, idx) => (
-              <div key={idx} className="flex items-center gap-2">
+              <div key={idx} className="flex flex-wrap items-center gap-2">
                 <input
                   type="color"
                   value={stage.color}
                   onChange={(e) => updateEditStage(idx, "color", e.target.value)}
-                  className="h-8 w-8 cursor-pointer rounded border-0 shrink-0"
+                  className="h-8 w-8 shrink-0 cursor-pointer rounded border-0"
                   aria-label={`Cor do estágio ${idx + 1}`}
                 />
                 <Input
                   value={stage.name}
                   onChange={(e) => updateEditStage(idx, "name", e.target.value)}
                   placeholder={`Estágio ${idx + 1}`}
-                  className="flex-1"
+                  className="min-w-0 flex-1"
                 />
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex shrink-0 items-center gap-1">
                   <Input
                     type="number" min={0} max={100}
                     value={stage.win_probability}
                     onChange={(e) => updateEditStage(idx, "win_probability", Number(e.target.value))}
-                    className="w-16 text-xs text-center"
+                    className="w-14 text-center text-xs"
                   />
                   <span className="text-xs text-muted-foreground">%</span>
                 </div>

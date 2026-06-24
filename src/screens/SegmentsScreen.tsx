@@ -214,7 +214,7 @@ export default function SegmentsScreen() {
             )}
 
             {form.entity === "deals" && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label className="text-xs">Valor mínimo</Label>
                   <Input type="number" value={form.minValue} onChange={(e) => setForm({ ...form, minValue: e.target.value })} className="h-9 text-xs" />

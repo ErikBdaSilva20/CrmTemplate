@@ -152,48 +152,48 @@ export default function DealDetailScreen() {
       </button>
 
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            {editingTitle ? (
-              <div className="flex items-center gap-1">
-                <Input value={titleDraft} onChange={(e) => setTitleDraft(e.target.value)} className="text-2xl font-bold h-auto py-0.5" autoFocus onKeyDown={(e) => e.key === "Enter" && saveTitle()} />
-                <button onClick={saveTitle} className="text-success"><Check className="h-5 w-5" /></button>
-                <button onClick={() => { setEditingTitle(false); setTitleDraft(deal.title); }} className="text-muted-foreground"><X className="h-5 w-5" /></button>
-              </div>
-            ) : (
-              <h1 className="text-2xl font-bold tracking-tight group cursor-pointer" onClick={() => setEditingTitle(true)}>
-                {deal.title}
-                <Edit2 className="ml-2 inline h-4 w-4 opacity-0 group-hover:opacity-50 transition-opacity" />
-              </h1>
-            )}
-          </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-2">
+          {/* Título */}
+          {editingTitle ? (
+            <div className="flex items-center gap-1">
+              <Input value={titleDraft} onChange={(e) => setTitleDraft(e.target.value)} className="text-xl font-bold h-auto py-0.5" autoFocus onKeyDown={(e) => e.key === "Enter" && saveTitle()} />
+              <button onClick={saveTitle} className="shrink-0 text-success"><Check className="h-5 w-5" /></button>
+              <button onClick={() => { setEditingTitle(false); setTitleDraft(deal.title); }} className="shrink-0 text-muted-foreground"><X className="h-5 w-5" /></button>
+            </div>
+          ) : (
+            <h1 className="text-xl font-bold tracking-tight group cursor-pointer sm:text-2xl" onClick={() => setEditingTitle(true)}>
+              {deal.title}
+              <Edit2 className="ml-2 inline h-4 w-4 opacity-0 group-hover:opacity-50 transition-opacity" />
+            </h1>
+          )}
 
-          <div className="flex items-center gap-3">
+          {/* Valor + estágio + saúde — wrap no mobile */}
+          <div className="flex flex-wrap items-center gap-2">
             {editingValue ? (
-              <div className="flex items-center gap-2">
+              <>
                 <Select value={currencyDraft} onValueChange={setCurrencyDraft}>
-                  <SelectTrigger className="w-24 h-8"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="BRL">BRL</SelectItem>
                     <SelectItem value="USD">USD</SelectItem>
                     <SelectItem value="EUR">EUR</SelectItem>
                   </SelectContent>
                 </Select>
-                <Input type="number" value={valueDraft} onChange={(e) => setValueDraft(e.target.value)} className="w-32 h-8" autoFocus onKeyDown={(e) => e.key === "Enter" && saveValue()} />
+                <Input type="number" value={valueDraft} onChange={(e) => setValueDraft(e.target.value)} className="w-28 h-8" autoFocus onKeyDown={(e) => e.key === "Enter" && saveValue()} />
                 <button onClick={saveValue} className="text-success"><Check className="h-4 w-4" /></button>
                 <button onClick={() => setEditingValue(false)} className="text-muted-foreground"><X className="h-4 w-4" /></button>
-              </div>
+              </>
             ) : (
-              <span className="text-xl font-bold text-primary cursor-pointer hover:opacity-80" onClick={() => setEditingValue(true)}>
+              <span className="text-lg font-bold text-primary cursor-pointer hover:opacity-80 sm:text-xl" onClick={() => setEditingValue(true)}>
                 {formatCurrency(Number(deal.value) || 0, deal.currency || "BRL")}
               </span>
             )}
 
             <Select value={deal.stage_id || ""} onValueChange={changeStage}>
-              <SelectTrigger className="w-44 h-8">
+              <SelectTrigger className="h-8 w-40">
                 <div className="flex items-center gap-1.5">
-                  {currentStage?.color && <div className="h-2 w-2 rounded-full" style={{ backgroundColor: currentStage.color }} />}
+                  {currentStage?.color && <div className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: currentStage.color }} />}
                   <SelectValue />
                 </div>
               </SelectTrigger>
@@ -216,11 +216,11 @@ export default function DealDetailScreen() {
         </div>
 
         {deal.status === "open" && (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={markAsWon} className="text-success border-success/30 hover:bg-success/10">
+          <div className="flex shrink-0 gap-2">
+            <Button variant="outline" onClick={markAsWon} className="flex-1 text-success border-success/30 hover:bg-success/10 sm:flex-none">
               <Trophy className="mr-2 h-4 w-4" />Ganho
             </Button>
-            <Button variant="outline" onClick={() => setLossModalOpen(true)} className="text-destructive border-destructive/30 hover:bg-destructive/10">
+            <Button variant="outline" onClick={() => setLossModalOpen(true)} className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10 sm:flex-none">
               <XCircle className="mr-2 h-4 w-4" />Perdido
             </Button>
           </div>

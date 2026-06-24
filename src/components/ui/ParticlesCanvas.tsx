@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 
-const DOT_COUNT = 62;
+const DOT_COUNT_DESKTOP = 62;
+const DOT_COUNT_MOBILE  = 22;
 const MAX_DIST = 125;
 const SPEED = 0.30;
 
@@ -44,7 +45,8 @@ export function ParticlesCanvas() {
     }
 
     function initDots() {
-      dots = Array.from({ length: DOT_COUNT }, (_, i) => ({
+      const count = W < 640 ? DOT_COUNT_MOBILE : DOT_COUNT_DESKTOP;
+      dots = Array.from({ length: count }, (_, i) => ({
         x: Math.random() * W,
         y: Math.random() * H,
         vx: (Math.random() - 0.5) * SPEED * 2,

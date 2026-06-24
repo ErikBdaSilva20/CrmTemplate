@@ -60,7 +60,7 @@ export function ContactCreateModal({ open, onOpenChange, onCreated, companies }:
           <DialogDescription>Preencha os dados do novo contato</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 mt-2">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label className="text-xs">Nome *</Label>
               <Input value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} className={errors.first_name ? "border-destructive" : ""} />

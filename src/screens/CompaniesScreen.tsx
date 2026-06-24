@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, Search, LayoutGrid, List, Filter, ArrowUpDown, Upload, Download,
+  Plus, LayoutGrid, List, Filter, ArrowUpDown, Upload, Download,
   Trash2, ChevronLeft, ChevronRight, X, Building2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,7 +35,6 @@ interface CompanyFilters {
 
 export default function CompaniesScreen() {
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -74,13 +72,11 @@ export default function CompaniesScreen() {
 
   const filtered = useMemo(() => {
     return companies.filter((c) => {
-      const s = `${c.name} ${c.domain} ${c.industry}`.toLowerCase();
-      if (search && !s.includes(search.toLowerCase())) return false;
       if (filters.industry && c.industry !== filters.industry) return false;
       if (filters.size && c.size !== filters.size) return false;
       return true;
     });
-  }, [companies, search, filters]);
+  }, [companies, filters]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -175,11 +171,6 @@ export default function CompaniesScreen() {
             <Plus className="mr-1 sm:mr-2 h-4 w-4" /><span className="hidden sm:inline">Nova Empresa</span><span className="sm:hidden">Nova</span>
           </Button>
         </div>
-      </div>
-
-      <div className="relative">
-        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Buscar empresas..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
       {showFilters && (

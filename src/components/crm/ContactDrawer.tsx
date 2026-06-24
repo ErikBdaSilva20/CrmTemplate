@@ -110,7 +110,7 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies }: Contact
 
   return (
     <Sheet open={!!contact} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-[520px] sm:max-w-[520px] overflow-y-auto p-0">
+      <SheetContent className="w-full sm:w-[520px] sm:max-w-[520px] overflow-y-auto p-0">
         {/* Header */}
         <div className="border-b border-border p-6">
           <div className="flex items-start gap-4">
@@ -146,7 +146,7 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies }: Contact
           <TabsContent value="overview" className="mt-4 space-y-4">
             {editing ? (
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1"><Label className="text-xs">Nome</Label>
                     <Input value={form.first_name || ""} onChange={(e) => setForm({ ...form, first_name: e.target.value })} /></div>
                   <div className="space-y-1"><Label className="text-xs">Sobrenome</Label>

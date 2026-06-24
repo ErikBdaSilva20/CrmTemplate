@@ -373,7 +373,7 @@ export default function TasksScreen() {
               <Label className="text-xs">Data de vencimento</Label>
               <Input type="date" value={formDueDate} onChange={(e) => setFormDueDate(e.target.value)} className="mt-1" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <Label className="text-xs">Contato</Label>
                 <Select value={formContactId} onValueChange={setFormContactId}>

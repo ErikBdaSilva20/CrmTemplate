@@ -17,7 +17,7 @@ import {
   updateCompany, listContactsByCompany, listDeals, listStages,
   type Company, type Contact, type Deal, type PipelineStage,
 } from "@/lib/data";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatCurrencyCompact, formatDate } from "@/lib/format";
 
 interface CompanyDrawerProps {
   company: Company | null;
@@ -73,7 +73,7 @@ export function CompanyDrawer({ company, onClose, onUpdate }: CompanyDrawerProps
 
   return (
     <Sheet open={!!company} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-[520px] sm:max-w-[520px] overflow-y-auto p-0">
+      <SheetContent className="w-full sm:w-[520px] sm:max-w-[520px] overflow-y-auto p-0">
         {/* Header */}
         <div className="border-b border-border p-6">
           <div className="flex items-start gap-4">
@@ -93,17 +93,17 @@ export function CompanyDrawer({ company, onClose, onUpdate }: CompanyDrawerProps
           </div>
 
           {/* Metrics */}
-          <div className="grid grid-cols-3 gap-3 mt-4">
-            <div className="rounded-lg border border-border p-2.5 text-center">
-              <p className="text-lg font-bold">{totalDeals}</p>
+          <div className="grid grid-cols-3 gap-2 mt-4">
+            <div className="rounded-lg border border-border p-2 text-center">
+              <p className="text-base font-bold">{totalDeals}</p>
               <p className="text-[10px] text-muted-foreground uppercase">Negócios</p>
             </div>
-            <div className="rounded-lg border border-border p-2.5 text-center">
-              <p className="text-lg font-bold text-primary">{formatCurrency(totalValue)}</p>
-              <p className="text-[10px] text-muted-foreground uppercase">Valor Total</p>
+            <div className="rounded-lg border border-border p-2 text-center">
+              <p className="text-sm font-bold text-primary truncate" title={formatCurrency(totalValue)}>{formatCurrencyCompact(totalValue)}</p>
+              <p className="text-[10px] text-muted-foreground uppercase">Total</p>
             </div>
-            <div className="rounded-lg border border-border p-2.5 text-center">
-              <p className="text-lg font-bold text-success">{formatCurrency(wonValue)}</p>
+            <div className="rounded-lg border border-border p-2 text-center">
+              <p className="text-sm font-bold text-success truncate" title={formatCurrency(wonValue)}>{formatCurrencyCompact(wonValue)}</p>
               <p className="text-[10px] text-muted-foreground uppercase">Ganhos</p>
             </div>
           </div>

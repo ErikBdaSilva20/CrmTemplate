@@ -59,13 +59,13 @@ export function DealsForecast({ deals, stages }: DealsForecastProps) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Comprometido (≥80%)</CardTitle>
           </CardHeader>
           <CardContent>
-            <span className="text-2xl font-bold text-success">{formatCurrency(totals.committed)}</span>
+            <span className="text-xl font-bold text-success sm:text-2xl">{formatCurrency(totals.committed)}</span>
           </CardContent>
         </Card>
         <Card>
@@ -73,7 +73,7 @@ export function DealsForecast({ deals, stages }: DealsForecastProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">Melhor Caso (≥50%)</CardTitle>
           </CardHeader>
           <CardContent>
-            <span className="text-2xl font-bold text-primary">{formatCurrency(totals.bestCase)}</span>
+            <span className="text-xl font-bold text-primary sm:text-2xl">{formatCurrency(totals.bestCase)}</span>
           </CardContent>
         </Card>
         <Card>
@@ -81,7 +81,7 @@ export function DealsForecast({ deals, stages }: DealsForecastProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">Pipeline Total</CardTitle>
           </CardHeader>
           <CardContent>
-            <span className="text-2xl font-bold text-foreground">{formatCurrency(totals.pipeline)}</span>
+            <span className="text-xl font-bold text-foreground sm:text-2xl">{formatCurrency(totals.pipeline)}</span>
           </CardContent>
         </Card>
       </div>
@@ -90,22 +90,22 @@ export function DealsForecast({ deals, stages }: DealsForecastProps) {
         {buckets.map((bucket) => (
           <Card key={bucket.month}>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle className="text-base capitalize">{bucket.label}</CardTitle>
-                <div className="flex items-center gap-4 text-sm">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                   <div className="flex items-center gap-1.5">
                     <div className="h-2 w-2 rounded-full bg-success" />
-                    <span className="text-muted-foreground">Comprometido:</span>
+                    <span className="text-muted-foreground">Comp.:</span>
                     <span className="font-semibold text-success">{formatCurrency(bucket.committed)}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <div className="h-2 w-2 rounded-full bg-primary" />
-                    <span className="text-muted-foreground">Melhor caso:</span>
+                    <span className="text-muted-foreground">Melhor:</span>
                     <span className="font-semibold text-primary">{formatCurrency(bucket.bestCase)}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <div className="h-2 w-2 rounded-full bg-muted-foreground" />
-                    <span className="text-muted-foreground">Pipeline:</span>
+                    <span className="text-muted-foreground">Total:</span>
                     <span className="font-semibold">{formatCurrency(bucket.pipeline)}</span>
                   </div>
                 </div>
@@ -125,12 +125,12 @@ export function DealsForecast({ deals, stages }: DealsForecastProps) {
                 {bucket.deals.map((deal) => {
                   const stageName = stages.find((s) => s.id === deal.stage_id)?.name || "—";
                   return (
-                    <div key={deal.id} className="flex items-center justify-between rounded-md border border-border p-2 text-sm">
-                      <div className="flex items-center gap-3">
-                        <span className="font-medium">{deal.title}</span>
-                        {deal.company && <span className="text-muted-foreground">· {deal.company.name}</span>}
+                    <div key={deal.id} className="flex flex-col gap-1 rounded-md border border-border p-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="truncate font-medium">{deal.title}</span>
+                        {deal.company && <span className="shrink-0 text-muted-foreground">· {deal.company.name}</span>}
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex shrink-0 items-center gap-2">
                         <Badge variant="secondary" className="text-xs">{stageName}</Badge>
                         <Badge variant="secondary" className="text-xs">{deal.probability || 0}%</Badge>
                         <span className="font-semibold text-primary">
