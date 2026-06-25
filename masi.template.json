@@ -35,7 +35,6 @@
       "src/lib/data/client.ts",
       "src/lib/data/types.gen.ts",
       "src/lib/auth.tsx",
-      "src/components/registry.tsx",
       "src/components/ui/**",
       "src/lib/utils.ts",
       "src/main.tsx",
