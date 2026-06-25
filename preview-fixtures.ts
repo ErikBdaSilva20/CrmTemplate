@@ -28,7 +28,7 @@ let sessionUser: PreviewUser = {
   email: "demo@flowcrm.local",
   name: "Demo User",
 };
-let sessionRole: Role = "admin";
+let sessionRole: Role | null = "admin";
 
 function ts() {
   return new Date().toISOString();

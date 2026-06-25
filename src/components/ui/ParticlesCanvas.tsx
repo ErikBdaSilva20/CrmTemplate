@@ -33,7 +33,7 @@ export function ParticlesCanvas() {
     let H = 0;
 
     function resize() {
-      if (!canvas) return;
+      if (!canvas || !ctx) return;
       const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
       W = rect.width;
