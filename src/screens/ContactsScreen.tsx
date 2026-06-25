@@ -127,8 +127,7 @@ export default function ContactsScreen() {
 
   const filtered = useMemo(() => {
     return contacts.filter((c) => {
-      const searchStr = `${c.first_name} ${c.last_name} ${c.email}`.toLowerCase();
-if (filters.status && filters.status !== "all" && c.status !== filters.status) return false;
+      if (filters.status && filters.status !== "all" && c.status !== filters.status) return false;
       if (filters.companyId && c.company_id !== filters.companyId) return false;
       if (filters.createdFrom && c.created_at && c.created_at < filters.createdFrom) return false;
       if (filters.createdTo && c.created_at && c.created_at > filters.createdTo) return false;

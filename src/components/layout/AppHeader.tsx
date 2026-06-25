@@ -1,24 +1,32 @@
-import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, Users, Building2, Handshake, ClipboardList } from "lucide-react";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
+import { Button } from '@/components/ui/button';
 import {
-  Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { SidebarTrigger } from '@/components/ui/sidebar';
+import { Building2, ClipboardList, Handshake, Plus, Users } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const routeLabels: Record<string, string> = {
-  "/dashboard": "Dashboard",
-  "/contacts": "Contatos",
-  "/companies": "Empresas",
-  "/deals": "Negócios",
-  "/activities": "Atividades",
-  "/tasks": "Tarefas",
-  "/sales-goals": "Metas",
-  "/segments": "Filtros Salvos",
-  "/settings": "Configurações",
+  '/dashboard': 'Dashboard',
+  '/contacts': 'Contatos',
+  '/companies': 'Empresas',
+  '/deals': 'Negócios',
+  '/activities': 'Atividades',
+  '/tasks': 'Tarefas',
+  '/sales-goals': 'Metas',
+  '/segments': 'Filtros Salvos',
+  '/settings': 'Configurações',
 };
 
 export function AppHeader() {
@@ -26,19 +34,19 @@ export function AppHeader() {
   const navigate = useNavigate();
 
   const quickActions = [
-    { label: "Novo Contato", icon: Users, path: "/contacts?action=new" },
-    { label: "Nova Empresa", icon: Building2, path: "/companies?action=new" },
-    { label: "Novo Negócio", icon: Handshake, path: "/deals?action=new" },
-    { label: "Nova Atividade", icon: ClipboardList, path: "/activities?action=new" },
+    { label: 'Novo Contato', icon: Users, path: '/contacts?action=new' },
+    { label: 'Nova Empresa', icon: Building2, path: '/companies?action=new' },
+    { label: 'Novo Negócio', icon: Handshake, path: '/deals?action=new' },
+    { label: 'Nova Atividade', icon: ClipboardList, path: '/activities?action=new' },
   ];
 
-  const parts: { label: string; href?: string }[] = [{ label: "FlowCRM", href: "/dashboard" }];
+  const parts: { label: string; href?: string }[] = [{ label: 'FlowCRM', href: '/dashboard' }];
 
-  if (location.pathname.startsWith("/deals/") && location.pathname !== "/deals") {
-    parts.push({ label: "Negócios", href: "/deals" });
-    parts.push({ label: "Detalhe" });
+  if (location.pathname.startsWith('/deals/') && location.pathname !== '/deals') {
+    parts.push({ label: 'Negócios', href: '/deals' });
+    parts.push({ label: 'Detalhe' });
   } else {
-    parts.push({ label: routeLabels[location.pathname] || "Página" });
+    parts.push({ label: routeLabels[location.pathname] || 'Página' });
   }
 
   return (
@@ -69,7 +77,12 @@ export function AppHeader() {
       <div className="flex items-center gap-1.5 sm:gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="icon" variant="default" className="h-8 w-8 rounded-full" aria-label="Ações rápidas">
+            <Button
+              size="icon"
+              variant="default"
+              className="h-8 w-8 rounded-full"
+              aria-label="Ações rápidas"
+            >
               <Plus className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
