@@ -27,6 +27,7 @@
       "src/components/crm/**",
       "src/components/layout/**",
       "src/components/NavLink.tsx",
+      "src/components/ParticlesCanvas.tsx",
       "src/hooks/**",
       "src/lib/data/*.repo.ts",
       "src/lib/data/index.ts",

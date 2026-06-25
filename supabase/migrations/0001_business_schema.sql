@@ -47,6 +47,7 @@ create table if not exists pipelines (
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
+drop trigger if exists trg_pipelines_touch on pipelines;
 create trigger trg_pipelines_touch before update on pipelines
   for each row execute function touch_updated_at();
 
@@ -94,6 +95,7 @@ create table if not exists companies (
   updated_at   timestamptz not null default now()
 );
 create index if not exists idx_companies_owner on companies(owner_id);
+drop trigger if exists trg_companies_touch on companies;
 create trigger trg_companies_touch before update on companies
   for each row execute function touch_updated_at();
 
@@ -115,6 +117,7 @@ create table if not exists contacts (
 );
 create index if not exists idx_contacts_owner on contacts(owner_id);
 create index if not exists idx_contacts_company on contacts(company_id);
+drop trigger if exists trg_contacts_touch on contacts;
 create trigger trg_contacts_touch before update on contacts
   for each row execute function touch_updated_at();
 
@@ -139,6 +142,7 @@ create table if not exists deals (
 );
 create index if not exists idx_deals_owner on deals(owner_id);
 create index if not exists idx_deals_stage on deals(stage_id);
+drop trigger if exists trg_deals_touch on deals;
 create trigger trg_deals_touch before update on deals
   for each row execute function touch_updated_at();
 
@@ -159,6 +163,7 @@ create table if not exists activities (
 );
 create index if not exists idx_activities_owner on activities(owner_id);
 create index if not exists idx_activities_deal on activities(deal_id);
+drop trigger if exists trg_activities_touch on activities;
 create trigger trg_activities_touch before update on activities
   for each row execute function touch_updated_at();
 
@@ -197,6 +202,7 @@ create table if not exists sales_goals (
   updated_at   timestamptz not null default now()
 );
 create index if not exists idx_sales_goals_owner on sales_goals(owner_id);
+drop trigger if exists trg_sales_goals_touch on sales_goals;
 create trigger trg_sales_goals_touch before update on sales_goals
   for each row execute function touch_updated_at();
 
@@ -211,6 +217,7 @@ create table if not exists segments (
   updated_at  timestamptz not null default now()
 );
 create index if not exists idx_segments_owner on segments(owner_id);
+drop trigger if exists trg_segments_touch on segments;
 create trigger trg_segments_touch before update on segments
   for each row execute function touch_updated_at();
 

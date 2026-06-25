@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { ParticlesCanvas } from "@/components/ui/ParticlesCanvas";
+import { ParticlesCanvas } from "@/components/ParticlesCanvas";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
