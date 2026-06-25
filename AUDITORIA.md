@@ -7,25 +7,39 @@
 
 ## Sumário executivo
 
-| # | Achado | Severidade | Arquivo(s) |
-|---|--------|-----------|------------|
-| 1 | Build quebrado (`cc;` + props faltando) | 🔴 Crítico | `AppHeader.tsx`, `AppLayout.tsx` |
-| 2 | TypeScript não-strict (`strict/noUnusedLocals = false`) | 🔴 Crítico | `tsconfig.app.json` |
-| 3 | `react-router-dom` v6 (contrato exige v7) | 🟠 Alto | `package.json` |
-| 4 | `vite` v5 (contrato exige v6) | 🟠 Alto | `package.json` |
-| 5 | Manifest protege `registry.tsx` inexistente | 🟠 Alto | `masi.template.json` |
-| 6 | Lockfile divergente (pnpm vs npm) | 🟠 Alto | raiz |
-| 7 | Conflito de tema (`class="dark"` hardcoded) | 🟡 Médio | `index.html`, `main.tsx` |
-| 8 | Assets/branding do Lovable vazados | 🟡 Médio | `index.html` |
-| 9 | Busca removida pela metade (hook órfão) | 🟡 Médio | `AppHeader.tsx`, `useKeyboardShortcuts.ts` |
-| 10 | `editable.allow` não cobre `layout/`, `hooks/`, `NavLink` | 🟡 Médio | `masi.template.json` |
-| 11 | `auth.tsx` é placeholder marcado como `protect` | 🟡 Médio | `auth.tsx`, `masi.template.json` |
-| 12 | Possível dead code (`use-toast` duplicado, `useDebounce`) | ⚪ Baixo | `src/hooks/` |
-| 13 | `ParticlesCanvas` não-shadcn dentro de `ui/` | ⚪ Baixo | `src/components/ui/` |
-| 14 | Triggers sem idempotência | ⚪ Baixo | `0001_business_schema.sql` |
-| 15 | `.env.example` não verificado (permissão) | ⚪ Baixo | `.env.example` |
+| # | Achado | Severidade | Arquivo(s) | Status |
+|---|--------|-----------|------------|--------|
+| 1 | Build quebrado (`cc;` + props faltando) | 🔴 Crítico | `AppHeader.tsx`, `AppLayout.tsx` | ✅ `53fb697` |
+| 2 | TypeScript não-strict (`strict/noUnusedLocals = false`) | 🔴 Crítico | `tsconfig.app.json` | ✅ `2a5a433` |
+| 3 | `react-router-dom` v6 (contrato exige v7) | 🟠 Alto | `package.json` | ✅ `b65fb23` |
+| 4 | `vite` v5 (contrato exige v6) | 🟠 Alto | `package.json` | ✅ `b65fb23` |
+| 5 | Manifest protege `registry.tsx` inexistente | 🟠 Alto | `masi.template.json` | ✅ `136e86d` |
+| 6 | Lockfile divergente (pnpm vs npm) | 🟠 Alto | raiz | ✅ `4042ab1` (padronizado em pnpm) |
+| 7 | Conflito de tema (`class="dark"` hardcoded) | 🟡 Médio | `index.html`, `main.tsx` | ✅ `c4031d1` |
+| 8 | Assets/branding do Lovable vazados | 🟡 Médio | `index.html` | ✅ `c4031d1` |
+| 9 | Busca removida pela metade (hook órfão) | 🟡 Médio | `AppHeader.tsx`, `useKeyboardShortcuts.ts` | ✅ `53fb697` |
+| 10 | `editable.allow` não cobre `layout/`, `hooks/`, `NavLink` | 🟡 Médio | `masi.template.json` | ✅ `98042a7` |
+| 11 | `auth.tsx` é placeholder marcado como `protect` | 🟡 Médio | `auth.tsx`, `masi.template.json` | ✅ `c2607ee` (promovido a canônico) |
+| 12 | Possível dead code (`use-toast` duplicado, `useDebounce`) | ⚪ Baixo | `src/hooks/` | ✅ `696838d` |
+| 13 | `ParticlesCanvas` não-shadcn dentro de `ui/` | ⚪ Baixo | `src/components/ui/` | ✅ `696838d` (movido p/ `src/components/`) |
+| 14 | Triggers sem idempotência | ⚪ Baixo | `0001_business_schema.sql` | ✅ `696838d` |
+| 15 | `.env.example` não verificado (permissão) | ⚪ Baixo | `.env.example` | ⏳ Manual (bloqueio de dotfile) |
+| + | Sistema radix de toast morto (sonner é a fonte real) | ⚪ Baixo | `App.tsx`, `ui/toast*`, `hooks/use-toast.ts` | ✅ `791afb5` |
 
 **Severidade:** 🔴 quebra build/publish · 🟠 viola contrato · 🟡 atenção · ⚪ informativo
+**Status:** ✅ corrigido · ⏳ pendente (ação manual)
+
+---
+
+## 🏁 Fechamento (2026-06-25)
+
+**14 de 15 achados corrigidos**, mais 1 extra (sistema de toast duplicado) encontrado e removido durante a execução. `pnpm install && pnpm run build` (`tsc -b && vite build`) passa **limpo** após todas as mudanças.
+
+Pendências (não bloqueiam build; fora do escopo de código):
+- **#15 `.env.example`** — não foi possível ler nesta sessão (bloqueio de permissão a dotfiles). Conferir manualmente que contém só `VITE_GATEWAY_URL` (+ eventualmente `VITE_PREVIEW_MODE` p/ o preview local), conforme `envContract`.
+- **E2E de publish (§B10)** — `publish` + catálogo + demo + Fly redeploy, executado na infra do time (fora deste repositório).
+
+> Decisão de lockfile (#6): padronizado em **pnpm** (`packageManager: pnpm@10.26.1`, `pnpm-lock.yaml` versionado). Sem bloqueador hard de npm, pois a receita de publish do time mistura `npm install`.
 
 ---
 
