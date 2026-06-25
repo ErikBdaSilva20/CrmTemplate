@@ -1,7 +1,6 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
-import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, RequireAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -35,7 +34,6 @@ function SuspenseRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <TooltipProvider>
-      <Toaster />
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
