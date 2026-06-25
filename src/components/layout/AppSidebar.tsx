@@ -87,7 +87,7 @@ export function AppSidebar() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
             <Handshake className="h-4 w-4 text-primary-foreground" />
           </div>
-          {!collapsed && <span className="text-lg font-semibold tracking-tight">MasIA CRM</span>}
+          {!collapsed && <span className="text-lg font-semibold tracking-tight">FlowCRM</span>}
         </div>
       </SidebarHeader>
       <SidebarContent>
