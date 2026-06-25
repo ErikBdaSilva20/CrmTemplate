@@ -25,6 +25,9 @@
     "allow": [
       "src/screens/**",
       "src/components/crm/**",
+      "src/components/layout/**",
+      "src/components/NavLink.tsx",
+      "src/hooks/**",
       "src/lib/data/*.repo.ts",
       "src/lib/data/index.ts",
       "src/lib/constants.ts",
