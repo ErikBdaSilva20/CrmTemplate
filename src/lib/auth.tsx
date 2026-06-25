@@ -1,10 +1,5 @@
 // =============================================================================
-// ⚠️ PLACEHOLDER — no template real, `auth.tsx` é herdado do scaffold `wiki`
-// (Importantdoc §B-Receita passo 7: "Reaproveite LoginScreen/AppShell/auth.tsx/
-// RequireAuth — não mexa nesses"). Este arquivo existe só pra as telas portadas
-// COMPILAREM e plugarem antes do scaffold chegar; na integração, use o do scaffold.
-//
-// Contrato (§B8):
+// auth.tsx — autenticação via Better-Auth (contrato §B8).
 //   • Login/cadastro via Better-Auth (auth.signIn/signUp/signOut do client.ts).
 //   • auth.me() → { user, role }. Papéis: admin | manager | rep (+ owner = criador).
 //   • 1º usuário do tenant vira admin; demais entram como rep (automático no gateway).
