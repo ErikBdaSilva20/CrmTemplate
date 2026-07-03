@@ -1,17 +1,8 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from "@/components/ui/dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -19,30 +10,17 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Plus, Phone, Mail, Calendar, FileText, CheckSquare, List,
-  CalendarDays, Trash2, Edit2, MoreHorizontal,
-  ChevronLeft, ChevronRight,
+  Plus, List, CalendarDays, Trash2, Edit2, MoreHorizontal, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  listActivities, createActivity, updateActivity, deleteActivity,
-  listContacts, listCompanies, listDeals,
-  type Activity, type Contact, type Company, type Deal, type ActivityType,
-} from "@/lib/data";
-
-const typeIcons: Record<ActivityType, React.ComponentType<{ className?: string }>> = {
-  call: Phone, email: Mail, meeting: Calendar, note: FileText, task: CheckSquare,
-};
-const typeLabels: Record<ActivityType, string> = {
-  call: "Ligação", email: "Email", meeting: "Reunião", note: "Nota", task: "Tarefa",
-};
-const typeColors: Record<ActivityType, string> = {
-  call: "text-emerald-600",
-  email: "text-blue-600",
-  meeting: "text-amber-600",
-  note: "text-muted-foreground",
-  task: "text-violet-600",
-};
+import { ActivityCreateEditModal } from "@/components/crm/ActivityCreateEditModal";
+import { useActivities } from "@/hooks/useActivities";
+import { useContacts } from "@/hooks/useContacts";
+import { useCompanies } from "@/hooks/useCompanies";
+import { useDeals } from "@/hooks/useDeals";
+import { ACTIVITY_TYPE, ACTIVITY_TYPES } from "@/lib/domain";
+import { startOfDay, endOfDay, getWeekRange, toLocalDateKey } from "@/lib/date";
+import { updateActivity, deleteActivity, type Activity } from "@/lib/data";
 
 type ViewMode = "list" | "calendar";
 type DateFilter = "todo" | "overdue" | "today" | "tomorrow" | "this_week" | "next_week" | "next_30_days";
@@ -57,24 +35,12 @@ const dateFilterLabels: Record<DateFilter, string> = {
   next_30_days: "Próximos 30 dias",
 };
 
-function startOfDay(d: Date) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
-function endOfDay(d: Date) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999); }
-
-function getWeekRange(offset: number) {
-  const now = new Date();
-  const day = now.getDay();
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1) + offset * 7);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  return { start: startOfDay(monday), end: endOfDay(sunday) };
-}
-
 export default function ActivitiesScreen() {
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [deals, setDeals] = useState<Deal[]>([]);
+  const { data: activities, refresh: refreshActivities } = useActivities();
+  const { data: contacts } = useContacts();
+  const { data: companies } = useCompanies();
+  const { data: deals } = useDeals();
+
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<DateFilter>("todo");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -95,39 +61,31 @@ export default function ActivitiesScreen() {
     return { year: d.getFullYear(), month: d.getMonth() };
   });
 
-  // Sem org_id, sem join — busca tudo e cruza no front.
-  const fetchData = useCallback(async () => {
-    const [activitiesAll, contactsAll, companiesAll, dealsAll] = await Promise.all([
-      listActivities(), listContacts(), listCompanies(), listDeals(),
-    ]);
-    setActivities(
-      [...activitiesAll].sort((a, b) => (a.due_date || "9999").localeCompare(b.due_date || "9999")),
-    );
-    setContacts(contactsAll);
-    setCompanies(companiesAll);
-    setDeals(dealsAll);
-  }, []);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const sortedActivities = useMemo(
+    () => [...activities].sort((a, b) => (a.due_date || "9999").localeCompare(b.due_date || "9999")),
+    [activities],
+  );
 
   const toggleComplete = async (activity: Activity) => {
     const completed_at = activity.completed_at ? null : new Date().toISOString();
     await updateActivity(activity.id, { completed_at });
-    fetchData();
+    refreshActivities();
   };
 
   const removeActivity = async (id: string) => {
     await deleteActivity(id);
-    fetchData();
+    refreshActivities();
     toast.success("Atividade excluída");
   };
 
-  const getContact = (id: string | null) => id ? contacts.find((c) => c.id === id) : null;
-  const getCompany = (id: string | null) => id ? companies.find((c) => c.id === id) : null;
-  const getDeal = (id: string | null) => id ? deals.find((d) => d.id === id) : null;
+  const getContact = (id: string | null) => (id ? contacts.find((c) => c.id === id) : null);
+  const getCompany = (id: string | null) => (id ? companies.find((c) => c.id === id) : null);
+  const getDeal = (id: string | null) => (id ? deals.find((d) => d.id === id) : null);
 
   const isOverdue = (a: Activity) => !a.completed_at && a.due_date && new Date(a.due_date) < new Date();
 
+  // Deps corretas: o filtro só depende de activities/typeFilter/dateFilter —
+  // contacts/deals nunca eram lidos aqui (AUDITORIA-CODIGO.md §5.2).
   const filtered = useMemo(() => {
     const now = new Date();
     const todayStart = startOfDay(now);
@@ -138,7 +96,7 @@ export default function ActivitiesScreen() {
     const nextWeek = getWeekRange(1);
     const next30End = endOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30));
 
-    return activities.filter((a) => {
+    return sortedActivities.filter((a) => {
       if (typeFilter !== "all" && a.type !== typeFilter) return false;
 
       const dueDate = a.due_date ? new Date(a.due_date) : null;
@@ -160,7 +118,7 @@ export default function ActivitiesScreen() {
       }
       return true;
     });
-  }, [activities, typeFilter, dateFilter, contacts, deals]);
+  }, [sortedActivities, typeFilter, dateFilter]);
 
   const counts = useMemo(() => {
     const now = new Date();
@@ -172,7 +130,7 @@ export default function ActivitiesScreen() {
     const nextWeek = getWeekRange(1);
     const next30End = endOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30));
 
-    const pending = activities.filter((a) => !a.completed_at);
+    const pending = sortedActivities.filter((a) => !a.completed_at);
     return {
       todo: pending.length,
       overdue: pending.filter((a) => a.due_date && new Date(a.due_date) < now).length,
@@ -182,7 +140,7 @@ export default function ActivitiesScreen() {
       next_week: pending.filter((a) => a.due_date && new Date(a.due_date) >= nextWeek.start && new Date(a.due_date) <= nextWeek.end).length,
       next_30_days: pending.filter((a) => a.due_date && new Date(a.due_date) >= todayStart && new Date(a.due_date) <= next30End).length,
     };
-  }, [activities]);
+  }, [sortedActivities]);
 
   const calendarDays = useMemo(() => {
     const { year, month } = calMonth;
@@ -202,15 +160,15 @@ export default function ActivitiesScreen() {
     return days;
   }, [calMonth]);
 
+  // Chave por dia em horário LOCAL — toISOString() converte pra UTC e
+  // deslocava atividades noturnas (UTC-3) pro dia seguinte no grid
+  // (AUDITORIA-CODIGO.md §5.1).
   const activitiesByDate = useMemo(() => {
     const map = new Map<string, Activity[]>();
     filtered.forEach((a) => {
-      const dateStr = a.due_date
-        ? new Date(a.due_date).toISOString().split("T")[0]
-        : a.created_at
-          ? new Date(a.created_at).toISOString().split("T")[0]
-          : null;
-      if (dateStr) {
+      const reference = a.due_date ? new Date(a.due_date) : a.created_at ? new Date(a.created_at) : null;
+      if (reference) {
+        const dateStr = toLocalDateKey(reference);
         if (!map.has(dateStr)) map.set(dateStr, []);
         map.get(dateStr)!.push(a);
       }
@@ -218,6 +176,7 @@ export default function ActivitiesScreen() {
     return map;
   }, [filtered]);
 
+  const todayKey = toLocalDateKey(new Date());
   const monthNames = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
   return (
@@ -254,8 +213,8 @@ export default function ActivitiesScreen() {
         >
           Tudo
         </button>
-        {(["call", "meeting", "task", "email", "note"] as ActivityType[]).map((t) => {
-          const Icon = typeIcons[t];
+        {ACTIVITY_TYPES.map((t) => {
+          const Icon = ACTIVITY_TYPE[t].icon;
           return (
             <button
               key={t}
@@ -263,11 +222,10 @@ export default function ActivitiesScreen() {
               className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${typeFilter === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
             >
               <Icon className="h-3 w-3" />
-              {typeLabels[t]}
+              {ACTIVITY_TYPE[t].label}
             </button>
           );
         })}
-
       </div>
 
       {/* Date filter tabs */}
@@ -318,7 +276,7 @@ export default function ActivitiesScreen() {
             </TableHeader>
             <TableBody>
               {filtered.map((a) => {
-                const Icon = typeIcons[a.type];
+                const Icon = ACTIVITY_TYPE[a.type].icon;
                 const contact = getContact(a.contact_id);
                 const deal = getDeal(a.deal_id);
                 const company = getCompany(a.company_id) || (contact?.company_id ? getCompany(contact.company_id) : null);
@@ -337,7 +295,7 @@ export default function ActivitiesScreen() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2 min-w-0">
-                        <Icon className={`h-3.5 w-3.5 shrink-0 ${typeColors[a.type]}`} />
+                        <Icon className={`h-3.5 w-3.5 shrink-0 ${ACTIVITY_TYPE[a.type].textClassName}`} />
                         <span className={`text-sm font-medium truncate ${a.completed_at ? "line-through" : ""}`}>
                           {a.title}
                         </span>
@@ -405,7 +363,7 @@ export default function ActivitiesScreen() {
                 <TableRow>
                   <TableCell colSpan={9} className="text-center py-16 text-muted-foreground">
                     <div className="space-y-2">
-                      <CheckSquare className="h-8 w-8 mx-auto text-muted-foreground/40" />
+                      <CalendarDays className="h-8 w-8 mx-auto text-muted-foreground/40" />
                       <p className="text-sm">Nenhuma atividade encontrada</p>
                       <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
                         <Plus className="mr-1.5 h-3.5 w-3.5" />Criar atividade
@@ -438,9 +396,9 @@ export default function ActivitiesScreen() {
               <div key={d} className="bg-muted px-2 py-1.5 text-center text-[10px] font-medium text-muted-foreground">{d}</div>
             ))}
             {calendarDays.map((day, i) => {
-              const dateStr = day.date.toISOString().split("T")[0];
+              const dateStr = toLocalDateKey(day.date);
               const dayActivities = activitiesByDate.get(dateStr) || [];
-              const isToday = dateStr === new Date().toISOString().split("T")[0];
+              const isToday = dateStr === todayKey;
               return (
                 <div key={i} className={`min-h-[80px] bg-background p-1 ${!day.inMonth ? "opacity-40" : ""}`}>
                   <div className={`text-xs font-medium mb-0.5 ${isToday ? "flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
@@ -448,10 +406,10 @@ export default function ActivitiesScreen() {
                   </div>
                   <div className="space-y-0.5">
                     {dayActivities.slice(0, 3).map((a) => {
-                      const ActIcon = typeIcons[a.type];
+                      const ActIcon = ACTIVITY_TYPE[a.type].icon;
                       return (
                         <div key={a.id} className={`flex items-center gap-1 rounded px-1 py-0.5 text-[9px] truncate bg-muted/50 ${isOverdue(a) ? "ring-1 ring-destructive" : ""}`}>
-                          <ActIcon className={`h-2.5 w-2.5 shrink-0 ${typeColors[a.type]}`} />
+                          <ActIcon className={`h-2.5 w-2.5 shrink-0 ${ACTIVITY_TYPE[a.type].textClassName}`} />
                           <span className="truncate">{a.title}</span>
                         </div>
                       );
@@ -475,201 +433,8 @@ export default function ActivitiesScreen() {
         contacts={contacts}
         companies={companies}
         deals={deals}
-        onSaved={fetchData}
+        onSaved={refreshActivities}
       />
     </div>
-  );
-}
-
-// ─── Create / Edit Modal ────────────────────────────────────────────
-interface ModalProps {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  activity: Activity | null;
-  contacts: Contact[];
-  companies: Company[];
-  deals: Deal[];
-  onSaved: () => void;
-}
-
-function ActivityCreateEditModal({ open, onOpenChange, activity, contacts, companies, deals, onSaved }: ModalProps) {
-  const isEdit = !!activity;
-
-  const [type, setType] = useState<ActivityType>("task");
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [dealId, setDealId] = useState<string>("none");
-  const [contactId, setContactId] = useState<string>("none");
-
-  const selectedDeal = deals.find((d) => d.id === dealId);
-  const resolvedContactId = dealId !== "none" && selectedDeal?.contact_id
-    ? selectedDeal.contact_id
-    : contactId !== "none" ? contactId : null;
-  const selectedContact = contacts.find((c) => c.id === resolvedContactId);
-  const resolvedCompanyId = selectedDeal?.company_id || selectedContact?.company_id || null;
-  const resolvedCompany = companies.find((c) => c.id === resolvedCompanyId);
-
-  useEffect(() => {
-    if (activity) {
-      setType(activity.type);
-      setTitle(activity.title);
-      setBody(activity.body || "");
-      setDueDate(activity.due_date ? activity.due_date.slice(0, 16) : "");
-      setDealId(activity.deal_id || "none");
-      setContactId(activity.contact_id || "none");
-    } else {
-      setType("task");
-      setTitle("");
-      setBody("");
-      setDueDate("");
-      setDealId("none");
-      setContactId("none");
-    }
-  }, [activity, open]);
-
-  const handleDealChange = (val: string) => {
-    setDealId(val);
-    if (val !== "none") {
-      const deal = deals.find((d) => d.id === val);
-      if (deal?.contact_id) setContactId(deal.contact_id);
-    }
-  };
-
-  // owner_id setado pelo gateway — não enviar.
-  const handleSave = async () => {
-    if (!title.trim()) return;
-    const payload = {
-      type,
-      title: title.trim(),
-      body: body || null,
-      due_date: dueDate ? new Date(dueDate).toISOString() : null,
-      deal_id: dealId !== "none" ? dealId : null,
-      contact_id: resolvedContactId,
-      company_id: resolvedCompanyId,
-    };
-
-    try {
-      if (isEdit) {
-        await updateActivity(activity!.id, payload);
-        toast.success("Atividade atualizada");
-      } else {
-        await createActivity(payload);
-        toast.success("Atividade criada");
-      }
-      onOpenChange(false);
-      onSaved();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao salvar");
-    }
-  };
-
-  const typeHints: Record<ActivityType, string> = {
-    note: "Registre observações sobre contatos, negócios ou empresas",
-    task: "Crie uma tarefa com prazo",
-    meeting: "Agende uma reunião com data e horário",
-    call: "Registre uma ligação com contato e resultado",
-    email: "Crie um rascunho de email para acompanhamento",
-  };
-
-  const availableContacts = dealId !== "none" && selectedDeal?.company_id
-    ? contacts.filter((c) => c.company_id === selectedDeal.company_id || !c.company_id)
-    : contacts;
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Editar Atividade" : "Nova Atividade"}</DialogTitle>
-          <DialogDescription>{typeHints[type]}</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 mt-2">
-          <div className="flex gap-1 rounded-lg border border-border bg-muted/50 p-1">
-            {(["task", "note", "call", "meeting", "email"] as ActivityType[]).map((t) => {
-              const Icon = typeIcons[t];
-              return (
-                <button
-                  key={t}
-                  onClick={() => setType(t)}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium transition-colors ${type === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {typeLabels[t]}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">
-              {type === "note" ? "Assunto" : type === "call" ? "Resumo da ligação" : "Título"} *
-            </Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={
-              type === "note" ? "Assunto da nota..." : type === "call" ? "Resumo da ligação..." : type === "meeting" ? "Nome da reunião..." : type === "email" ? "Assunto do email..." : "Título da tarefa..."
-            } />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">
-              {type === "note" ? "Conteúdo" : type === "call" ? "Notas da ligação" : type === "meeting" ? "Pauta / Notas" : type === "email" ? "Corpo do email" : "Descrição"}
-            </Label>
-            <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={type === "note" || type === "email" ? 6 : 3} />
-          </div>
-
-          {(type === "task" || type === "meeting" || type === "call") && (
-            <div className="space-y-1">
-              <Label className="text-xs">
-                {type === "meeting" ? "Data/hora" : type === "call" ? "Data/hora da ligação" : "Prazo"}
-              </Label>
-              <Input type="datetime-local" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-            </div>
-          )}
-
-          <div className="space-y-1">
-            <Label className="text-xs">Negócio</Label>
-            <Select value={dealId} onValueChange={handleDealChange}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Nenhum</SelectItem>
-                {deals.map((d) => <SelectItem key={d.id} value={d.id}>{d.title}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">Contato</Label>
-            <Select
-              value={resolvedContactId || "none"}
-              onValueChange={(v) => setContactId(v)}
-              disabled={dealId !== "none" && !!selectedDeal?.contact_id}
-            >
-              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Nenhum</SelectItem>
-                {availableContacts.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.first_name} {c.last_name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {dealId !== "none" && selectedDeal?.contact_id && (
-              <p className="text-[10px] text-muted-foreground">Preenchido automaticamente pelo negócio</p>
-            )}
-          </div>
-
-          {resolvedCompany && (
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Empresa (vinculada automaticamente)</Label>
-              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                🏢 {resolvedCompany.name}
-              </div>
-            </div>
-          )}
-
-          <Button onClick={handleSave} className="w-full" disabled={!title.trim()}>
-            {isEdit ? "Salvar Alterações" : "Criar Atividade"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }

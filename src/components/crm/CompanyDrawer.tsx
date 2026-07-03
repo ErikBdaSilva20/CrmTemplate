@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -13,10 +13,11 @@ import {
 import { Edit2, X, Save, Building2, Globe, Users, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { INDUSTRIES, COMPANY_SIZES } from "@/lib/constants";
-import {
-  updateCompany, listContactsByCompany, listDeals, listStages,
-  type Company, type Contact, type Deal, type PipelineStage,
-} from "@/lib/data";
+import { DEAL_STATUS } from "@/lib/domain";
+import { useContacts } from "@/hooks/useContacts";
+import { useDeals } from "@/hooks/useDeals";
+import { useStages } from "@/hooks/usePipelines";
+import { updateCompany, type Company } from "@/lib/data";
 import { formatCurrency, formatCurrencyCompact, formatDate } from "@/lib/format";
 
 interface CompanyDrawerProps {
@@ -26,28 +27,26 @@ interface CompanyDrawerProps {
 }
 
 export function CompanyDrawer({ company, onClose, onUpdate }: CompanyDrawerProps) {
+  const { data: allContacts } = useContacts();
+  const { data: allDeals } = useDeals();
+  const { data: stages } = useStages();
+
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<Company>>({});
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [stages, setStages] = useState<PipelineStage[]>([]);
 
-  // Sem join: busca relacionados em paralelo e filtra no front (§B5).
-  const fetchRelated = useCallback(async () => {
-    if (!company) return;
-    const [contactsByCo, allDeals, allStages] = await Promise.all([
-      listContactsByCompany(company.id),
-      listDeals(),
-      listStages(),
-    ]);
-    setContacts(contactsByCo);
-    setDeals(allDeals.filter((d) => d.company_id === company.id));
-    setStages(allStages);
-  }, [company]);
+  // Sem join: filtra os relacionados já cacheados no front (§B5).
+  const contacts = useMemo(
+    () => (company ? allContacts.filter((c) => c.company_id === company.id) : []),
+    [allContacts, company],
+  );
+  const deals = useMemo(
+    () => (company ? allDeals.filter((d) => d.company_id === company.id) : []),
+    [allDeals, company],
+  );
 
   useEffect(() => {
-    if (company) { setForm(company); setEditing(false); fetchRelated(); }
-  }, [company, fetchRelated]);
+    if (company) { setForm(company); setEditing(false); }
+  }, [company]);
 
   const handleSave = async () => {
     if (!company) return;
@@ -210,8 +209,8 @@ export function CompanyDrawer({ company, onClose, onUpdate }: CompanyDrawerProps
                         <p className="text-sm font-medium">{d.title}</p>
                         <div className="flex items-center gap-2 mt-1">
                           {stage && <Badge variant="secondary" className="text-[10px]">{stage.name}</Badge>}
-                          <Badge variant="secondary" className={`text-[10px] ${d.status === "won" ? "bg-success/10 text-success" : d.status === "lost" ? "bg-destructive/10 text-destructive" : ""}`}>
-                            {d.status === "open" ? "Aberto" : d.status === "won" ? "Ganho" : "Perdido"}
+                          <Badge variant="secondary" className={`text-[10px] ${DEAL_STATUS[d.status || "open"].badgeClassName}`}>
+                            {DEAL_STATUS[d.status || "open"].label}
                           </Badge>
                         </div>
                       </div>

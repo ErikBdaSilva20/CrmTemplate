@@ -1,5 +1,5 @@
 -- =============================================================================
--- FlowCRM → template MasIA — schema de negócio (Onda 1 / V1)
+-- CellRM → template MasIA — schema de negócio (Onda 1 / V1)
 -- Roda no Neon do tenant, DEPOIS que o gateway cria as tabelas do Better-Auth.
 --
 -- Regras seguidas à risca (Importantdoc §B4):

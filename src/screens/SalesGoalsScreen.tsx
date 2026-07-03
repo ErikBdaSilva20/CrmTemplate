@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,11 +18,11 @@ import {
   ChevronLeft, ChevronRight, Trophy, Phone, Handshake, UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  listSalesGoals, createSalesGoal, updateSalesGoal, deleteSalesGoal,
-  listDeals, listActivities, listContacts,
-  type SalesGoal,
-} from "@/lib/data";
+import { useSalesGoals } from "@/hooks/useSalesGoals";
+import { useDeals } from "@/hooks/useDeals";
+import { useActivities } from "@/hooks/useActivities";
+import { useContacts } from "@/hooks/useContacts";
+import { createSalesGoal, updateSalesGoal, deleteSalesGoal, type SalesGoal } from "@/lib/data";
 
 const GOAL_TYPES = [
   { value: "revenue", label: "Receita (R$)", icon: TrendingUp, color: "text-emerald-500" },
@@ -40,38 +40,36 @@ export default function SalesGoalsScreen() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
-  const [goals, setGoals] = useState<SalesGoal[]>([]);
-  const [actuals, setActuals] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(true);
+
+  const { data: allGoals, loading, refresh: refreshGoals } = useSalesGoals();
+  const { data: deals } = useDeals();
+  const { data: activities } = useActivities();
+  const { data: contacts } = useContacts();
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editGoal, setEditGoal] = useState<SalesGoal | null>(null);
 
   const [form, setForm] = useState({ goal_type: "revenue", target_value: "" });
 
   // Metas do período (sem org_id; owner setado pelo gateway). Atuais agregados no front.
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    const [goalsAll, dealsAll, activitiesAll, contactsAll] = await Promise.all([
-      listSalesGoals(), listDeals(), listActivities(), listContacts(),
-    ]);
-    const periodGoals = goalsAll.filter((g) => g.period_month === month && g.period_year === year);
-    setGoals(periodGoals);
+  const goals = useMemo(
+    () => allGoals.filter((g) => g.period_month === month && g.period_year === year),
+    [allGoals, month, year],
+  );
 
+  const actuals = useMemo(() => {
     const start = new Date(year, month - 1, 1);
     const end = new Date(year, month, 1);
     const inRange = (s: string | null) => s !== null && new Date(s) >= start && new Date(s) < end;
 
-    const wonInPeriod = dealsAll.filter((d) => d.status === "won" && inRange(d.updated_at));
-    setActuals({
+    const wonInPeriod = deals.filter((d) => d.status === "won" && inRange(d.updated_at));
+    return {
       revenue: wonInPeriod.reduce((sum, d) => sum + (Number(d.value) || 0), 0),
       deals_closed: wonInPeriod.length,
-      activities: activitiesAll.filter((a) => inRange(a.created_at)).length,
-      new_contacts: contactsAll.filter((c) => inRange(c.created_at)).length,
-    });
-    setLoading(false);
-  }, [month, year]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
+      activities: activities.filter((a) => inRange(a.created_at)).length,
+      new_contacts: contacts.filter((c) => inRange(c.created_at)).length,
+    } as Record<string, number>;
+  }, [deals, activities, contacts, month, year]);
 
   const openCreate = () => {
     setEditGoal(null);
@@ -102,7 +100,7 @@ export default function SalesGoalsScreen() {
         toast.success("Meta criada");
       }
       setDialogOpen(false);
-      fetchData();
+      refreshGoals();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao salvar");
     }
@@ -111,7 +109,7 @@ export default function SalesGoalsScreen() {
   const removeGoal = async (id: string) => {
     await deleteSalesGoal(id);
     toast.success("Meta excluída");
-    fetchData();
+    refreshGoals();
   };
 
   const navMonth = (dir: number) => {

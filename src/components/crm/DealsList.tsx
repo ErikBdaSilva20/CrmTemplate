@@ -7,19 +7,13 @@ import {
 } from "@/components/ui/table";
 import { ArrowUpDown, Trophy, XCircle, Trash2, AlertTriangle } from "lucide-react";
 import type { DealWithRelations, PipelineStage } from "@/lib/data";
+import { DEAL_STATUS } from "@/lib/domain";
 import { formatCurrency, formatDate, daysUntil } from "@/lib/format";
 
 type Stage = PipelineStage;
 
 type SortKey = "title" | "value" | "close_date" | "probability" | "status" | "created_at";
 type SortDir = "asc" | "desc";
-
-const statusLabels = { open: "Aberto", won: "Ganho", lost: "Perdido" };
-const statusColors = {
-  open: "bg-primary/10 text-primary",
-  won: "bg-success/10 text-success",
-  lost: "bg-destructive/10 text-destructive",
-};
 
 interface DealsListProps {
   deals: DealWithRelations[];
@@ -61,7 +55,8 @@ export function DealsList({
   };
   const toggleOne = (id: string) => {
     const next = new Set(selectedDeals);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
     onSelectionChange(next);
   };
 
@@ -143,8 +138,8 @@ export function DealsList({
                     ) : "—"}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary" className={statusColors[deal.status || "open"]}>
-                      {statusLabels[deal.status || "open"]}
+                    <Badge variant="secondary" className={DEAL_STATUS[deal.status || "open"].badgeClassName}>
+                      {DEAL_STATUS[deal.status || "open"].label}
                     </Badge>
                   </TableCell>
                 </TableRow>

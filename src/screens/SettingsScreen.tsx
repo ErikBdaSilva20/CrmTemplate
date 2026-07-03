@@ -4,18 +4,18 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Plus, Trash2, X, Lock } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Trash2, X, Lock, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, roleAtLeast } from "@/lib/auth";
+import { PipelineEditor } from "@/components/crm/PipelineEditor";
+import { usePipelines, useStages } from "@/hooks/usePipelines";
+import { useLossReasons } from "@/hooks/useLossReasons";
 import {
-  listPipelines, createPipeline, deletePipeline,
-  listStages, createStage, updateStage, deleteStage,
-  listLossReasons, createLossReason, deleteLossReason,
+  createPipeline, deletePipeline,
   listTags, createTag, deleteTag,
-  type Pipeline, type PipelineStage, type LossReason, type Tag,
+  createLossReason, deleteLossReason,
+  type Tag,
 } from "@/lib/data";
 
 export default function SettingsScreen() {
@@ -54,33 +54,28 @@ export default function SettingsScreen() {
 }
 
 // ── Pipelines Tab ──
+// Estágios são editados pelo mesmo <PipelineEditor> usado em DealsScreen —
+// antes havia duas implementações divergentes (AUDITORIA-CODIGO.md §3.2).
 function PipelinesTab({ canManage }: { canManage: boolean }) {
-  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
-  const [stages, setStages] = useState<PipelineStage[]>([]);
+  const { data: pipelines, refresh: refreshPipelines } = usePipelines();
+  const { data: stages, refresh: refreshStages } = useStages();
+  const { data: lossReasons, refresh: refreshLossReasons } = useLossReasons();
+
   const [selectedPipeline, setSelectedPipeline] = useState("");
   const [newPipelineName, setNewPipelineName] = useState("");
-  const [newStageName, setNewStageName] = useState("");
-  const [newStageColor, setNewStageColor] = useState("#3b82f6");
-  const [newStageProb, setNewStageProb] = useState("0");
-  const [lossReasons, setLossReasons] = useState<LossReason[]>([]);
   const [newLossReason, setNewLossReason] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
 
-  const fetchAll = useCallback(async () => {
-    const [p, s, lr] = await Promise.all([listPipelines(), listStages(), listLossReasons()]);
-    setPipelines(p);
-    setStages(s);
-    setLossReasons(lr);
-    setSelectedPipeline((prev) => prev || (p.length ? p[0].id : ""));
-  }, []);
-
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    setSelectedPipeline((prev) => prev || (pipelines.length ? pipelines[0].id : ""));
+  }, [pipelines]);
 
   const addPipeline = async () => {
     if (!newPipelineName) return;
     const created = await createPipeline({ name: newPipelineName, is_default: pipelines.length === 0 });
     setNewPipelineName("");
     if (created?.id) setSelectedPipeline(created.id);
-    fetchAll();
+    refreshPipelines();
     toast.success("Pipeline criado");
   };
 
@@ -88,54 +83,27 @@ function PipelinesTab({ canManage }: { canManage: boolean }) {
     // estágios são apagados em cascata pela FK (on delete cascade)
     await deletePipeline(id);
     setSelectedPipeline("");
-    fetchAll();
+    refreshPipelines();
+    refreshStages();
     toast.success("Pipeline excluído");
-  };
-
-  const addStage = async () => {
-    if (!selectedPipeline || !newStageName) return;
-    const maxOrder = stages.filter((s) => s.pipeline_id === selectedPipeline).reduce((max, s) => Math.max(max, s.sort_order), -1);
-    await createStage({
-      pipeline_id: selectedPipeline, name: newStageName,
-      sort_order: maxOrder + 1, color: newStageColor, win_probability: parseFloat(newStageProb) || 0,
-    });
-    setNewStageName("");
-    fetchAll();
-    toast.success("Estágio adicionado");
-  };
-
-  const removeStage = async (id: string) => {
-    await deleteStage(id);
-    fetchAll();
-    toast.success("Estágio excluído");
-  };
-
-  const moveStage = async (stageId: string, direction: "up" | "down") => {
-    const pStages = stages.filter((s) => s.pipeline_id === selectedPipeline).sort((a, b) => a.sort_order - b.sort_order);
-    const idx = pStages.findIndex((s) => s.id === stageId);
-    if ((direction === "up" && idx === 0) || (direction === "down" && idx === pStages.length - 1)) return;
-    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    await Promise.all([
-      updateStage(pStages[idx].id, { sort_order: pStages[swapIdx].sort_order }),
-      updateStage(pStages[swapIdx].id, { sort_order: pStages[idx].sort_order }),
-    ]);
-    fetchAll();
   };
 
   const addLossReason = async () => {
     if (!newLossReason) return;
     await createLossReason({ label: newLossReason });
     setNewLossReason("");
-    fetchAll();
+    refreshLossReasons();
     toast.success("Razão de perda adicionada");
   };
 
   const removeLossReason = async (id: string) => {
     await deleteLossReason(id);
-    fetchAll();
+    refreshLossReasons();
   };
 
-  const pipelineStages = stages.filter((s) => s.pipeline_id === selectedPipeline).sort((a, b) => a.sort_order - b.sort_order);
+  const pipelineStages = stages
+    .filter((s) => s.pipeline_id === selectedPipeline)
+    .sort((a, b) => a.sort_order - b.sort_order);
 
   return (
     <div className="space-y-4">
@@ -172,37 +140,30 @@ function PipelinesTab({ canManage }: { canManage: boolean }) {
       {selectedPipeline && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Estágios</CardTitle>
-            <CardDescription className="text-[10px]">Configure estágios do pipeline selecionado.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {canManage && (
-              <div className="flex gap-2">
-                <Input placeholder="Nome" value={newStageName} onChange={(e) => setNewStageName(e.target.value)} className="h-8 text-xs flex-1" />
-                <Input type="color" value={newStageColor} onChange={(e) => setNewStageColor(e.target.value)} className="w-10 h-8 p-0.5" aria-label="Cor" />
-                <Input type="number" placeholder="Prob %" value={newStageProb} onChange={(e) => setNewStageProb(e.target.value)} className="h-8 text-xs w-20" min="0" max="100" />
-                <Button size="sm" className="h-8" onClick={addStage}><Plus className="h-3 w-3" /></Button>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-sm">Estágios</CardTitle>
+                <CardDescription className="text-[10px]">Estágios do pipeline selecionado.</CardDescription>
               </div>
-            )}
-            <div className="space-y-1">
-              {pipelineStages.map((s, i) => (
-                <div key={s.id} className="flex items-center gap-2 rounded-md border border-border p-2">
-                  {canManage && (
-                    <div className="flex flex-col gap-0.5">
-                      <button onClick={() => moveStage(s.id, "up")} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30 text-[10px]">▲</button>
-                      <button onClick={() => moveStage(s.id, "down")} disabled={i === pipelineStages.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30 text-[10px]">▼</button>
-                    </div>
-                  )}
-                  <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: s.color || "#888" }} />
-                  <span className="text-xs font-medium flex-1">{s.name}</span>
-                  <Badge variant="outline" className="text-[8px]">{s.win_probability || 0}%</Badge>
-                  <span className="text-[9px] text-muted-foreground">#{s.sort_order}</span>
-                  {canManage && (
-                    <button onClick={() => removeStage(s.id)} className="text-muted-foreground hover:text-destructive" aria-label="Excluir estágio"><Trash2 className="h-3 w-3" /></button>
-                  )}
-                </div>
-              ))}
+              {canManage && (
+                <Button variant="outline" size="sm" className="h-8 text-xs shrink-0" onClick={() => setEditorOpen(true)}>
+                  <Settings2 className="mr-1 h-3.5 w-3.5" />Editar estágios
+                </Button>
+              )}
             </div>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            {pipelineStages.map((s) => (
+              <div key={s.id} className="flex items-center gap-2 rounded-md border border-border p-2">
+                <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: s.color || "#888" }} />
+                <span className="text-xs font-medium flex-1">{s.name}</span>
+                <Badge variant="outline" className="text-[8px]">{s.win_probability || 0}%</Badge>
+                <span className="text-[9px] text-muted-foreground">#{s.sort_order}</span>
+              </div>
+            ))}
+            {pipelineStages.length === 0 && (
+              <p className="text-xs text-muted-foreground py-2">Nenhum estágio configurado</p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -229,6 +190,14 @@ function PipelinesTab({ canManage }: { canManage: boolean }) {
           </div>
         </CardContent>
       </Card>
+
+      <PipelineEditor
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        pipelineId={selectedPipeline}
+        stages={stages.filter((s) => s.pipeline_id === selectedPipeline)}
+        onSaved={refreshStages}
+      />
     </div>
   );
 }

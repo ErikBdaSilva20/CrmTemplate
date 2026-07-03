@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -20,7 +20,8 @@ import { CompanyDrawer } from "@/components/crm/CompanyDrawer";
 import { CompanyCreateModal } from "@/components/crm/CompanyCreateModal";
 import { CSVImportModal } from "@/components/crm/CSVImportModal";
 import { COMPANY_SIZES } from "@/lib/constants";
-import { listCompanies, deleteCompany, type Company } from "@/lib/data";
+import { useCompanies } from "@/hooks/useCompanies";
+import { deleteCompany } from "@/lib/data";
 import { formatCurrencyCompact, formatDate } from "@/lib/format";
 
 type SortKey = "name" | "domain" | "industry" | "size" | "revenue" | "created_at";
@@ -34,7 +35,7 @@ interface CompanyFilters {
 }
 
 export default function CompaniesScreen() {
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const { data: companiesRaw, refresh: refreshCompanies } = useCompanies();
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -43,7 +44,10 @@ export default function CompaniesScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCompanies, setSelectedCompanies] = useState<Set<string>>(new Set());
 
-  const [drawerCompany, setDrawerCompany] = useState<Company | null>(null);
+  // Guarda só o id e deriva a empresa ao vivo da cache — evita o Sheet
+  // mostrar dados velhos logo após salvar (o objeto ficava congelado no
+  // momento em que o Sheet foi aberto).
+  const [drawerCompanyId, setDrawerCompanyId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -56,15 +60,15 @@ export default function CompaniesScreen() {
     }
   }, [searchParams, setSearchParams]);
 
-  // Sem org_id, sem join, sem realtime — o gateway isola por tenant.
-  const fetchData = useCallback(async () => {
-    const data = await listCompanies();
-    setCompanies(
-      [...data].sort((a, b) => (b.created_at || "").localeCompare(a.created_at || "")),
-    );
-  }, []);
+  const companies = useMemo(
+    () => [...companiesRaw].sort((a, b) => (b.created_at || "").localeCompare(a.created_at || "")),
+    [companiesRaw],
+  );
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const drawerCompany = useMemo(
+    () => (drawerCompanyId ? companies.find((c) => c.id === drawerCompanyId) ?? null : null),
+    [companies, drawerCompanyId],
+  );
 
   const industries = useMemo(() => {
     return [...new Set(companies.map((c) => c.industry).filter(Boolean))] as string[];
@@ -116,7 +120,7 @@ export default function CompaniesScreen() {
     const ids = Array.from(selectedCompanies);
     await Promise.all(ids.map((id) => deleteCompany(id)));
     setSelectedCompanies(new Set());
-    fetchData();
+    refreshCompanies();
     toast.success(`${ids.length} empresas excluídas`);
   };
 
@@ -228,7 +232,7 @@ export default function CompaniesScreen() {
             </TableHeader>
             <TableBody>
               {paginated.map((c) => (
-                <TableRow key={c.id} className="cursor-pointer" onClick={() => setDrawerCompany(c)}>
+                <TableRow key={c.id} className="cursor-pointer" onClick={() => setDrawerCompanyId(c.id)}>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <Checkbox checked={selectedCompanies.has(c.id)} onCheckedChange={() => toggleOne(c.id)} />
                   </TableCell>
@@ -271,7 +275,7 @@ export default function CompaniesScreen() {
       {viewMode === "cards" && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
           {paginated.map((c) => (
-            <Card key={c.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setDrawerCompany(c)}>
+            <Card key={c.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setDrawerCompanyId(c.id)}>
               <CardContent className="p-4 space-y-2">
                 <div className="flex items-center gap-3">
                   {c.domain ? (
@@ -303,9 +307,9 @@ export default function CompaniesScreen() {
         </div>
       )}
 
-      <CompanyDrawer company={drawerCompany} onClose={() => setDrawerCompany(null)} onUpdate={fetchData} />
-      <CompanyCreateModal open={createOpen} onOpenChange={setCreateOpen} onCreated={fetchData} />
-      <CSVImportModal open={csvOpen} onOpenChange={setCsvOpen} onImported={fetchData} entityType="companies" />
+      <CompanyDrawer company={drawerCompany} onClose={() => setDrawerCompanyId(null)} onUpdate={refreshCompanies} />
+      <CompanyCreateModal open={createOpen} onOpenChange={setCreateOpen} onCreated={refreshCompanies} />
+      <CSVImportModal open={csvOpen} onOpenChange={setCsvOpen} onImported={refreshCompanies} entityType="companies" />
     </div>
   );
 }

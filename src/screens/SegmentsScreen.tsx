@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,10 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Filter, Pencil, Trash2, Users, Handshake } from "lucide-react";
 import { toast } from "sonner";
-import {
-  listSegments, createSegment, updateSegment, deleteSegment,
-  type Segment,
-} from "@/lib/data";
+import { useSegments } from "@/hooks/useSegments";
+import { createSegment, updateSegment, deleteSegment, type Segment } from "@/lib/data";
 
 // Filtros salvos por usuário (owner setado pelo gateway). Reusa a tabela `segments`:
 // cada segmento guarda um filtro reaproveitável para Contatos ou Negócios em `filters` (jsonb).
@@ -30,8 +28,7 @@ interface SegmentFilters {
 }
 
 export default function SegmentsScreen() {
-  const [segments, setSegments] = useState<Segment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: segments, loading, refresh: refreshSegments } = useSegments();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editSeg, setEditSeg] = useState<Segment | null>(null);
 
@@ -39,14 +36,6 @@ export default function SegmentsScreen() {
     name: "", description: "", entity: "contacts" as "contacts" | "deals",
     status: "any", minValue: "", maxValue: "",
   });
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setSegments(await listSegments());
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
 
   const openCreate = () => {
     setEditSeg(null);
@@ -91,7 +80,7 @@ export default function SegmentsScreen() {
         toast.success("Filtro salvo");
       }
       setDialogOpen(false);
-      fetchData();
+      refreshSegments();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao salvar");
     }
@@ -100,7 +89,7 @@ export default function SegmentsScreen() {
   const remove = async (id: string) => {
     await deleteSegment(id);
     toast.success("Filtro excluído");
-    fetchData();
+    refreshSegments();
   };
 
   const describe = (s: Segment) => {

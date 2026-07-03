@@ -1,29 +1,28 @@
-import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { GripVertical } from "lucide-react";
+import { useState } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { GripVertical } from 'lucide-react';
 import {
-  DndContext, closestCenter, type DragEndEvent, DragOverlay, type DragStartEvent,
-  PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
-  useDraggable, useDroppable,
-} from "@dnd-kit/core";
-import type { Contact, Company, ContactStatus } from "@/lib/data";
+  DndContext,
+  closestCenter,
+  type DragEndEvent,
+  DragOverlay,
+  type DragStartEvent,
+  PointerSensor,
+  TouchSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  useDroppable,
+} from '@dnd-kit/core';
+import type { Contact, Company, ContactStatus } from '@/lib/data';
+import { CONTACT_STATUS, CONTACT_STATUSES } from '@/lib/domain';
 
-// Repropõe o antigo "kanban por vendedor" do FlowCRM como funil por STATUS:
+// Repropõe o antigo "kanban por vendedor" do CellRM como funil por STATUS:
 // na fundação não há lista de membros e owner_id é imutável pelo front (setado pelo
 // gateway). Status (lead→prospect→customer→churned) é editável e é o funil natural.
-
-const STATUS_ORDER: ContactStatus[] = ["lead", "prospect", "customer", "churned"];
-const statusColors: Record<ContactStatus, string> = {
-  lead: "bg-primary/10 text-primary",
-  prospect: "bg-warning/10 text-warning",
-  customer: "bg-success/10 text-success",
-  churned: "bg-destructive/10 text-destructive",
-};
-const statusLabels: Record<ContactStatus, string> = {
-  lead: "Lead", prospect: "Prospect", customer: "Cliente", churned: "Churned",
-};
 
 function ContactCard({
   contact,
@@ -41,7 +40,10 @@ function ContactCard({
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} className="group">
-      <Card className="cursor-pointer border-border bg-card transition-all hover:shadow-md" onClick={onClick}>
+      <Card
+        className="cursor-pointer border-border bg-card transition-all hover:shadow-md"
+        onClick={onClick}
+      >
         <CardContent className="p-3">
           <div className="flex items-start gap-2">
             <button
@@ -55,13 +57,18 @@ function ContactCard({
               <div className="flex items-center gap-2">
                 <Avatar className="h-6 w-6 shrink-0">
                   <AvatarFallback className="bg-primary/10 text-primary text-[9px]">
-                    {contact.first_name[0]}{contact.last_name?.[0] || ""}
+                    {contact.first_name[0]}
+                    {contact.last_name?.[0] || ''}
                   </AvatarFallback>
                 </Avatar>
-                <p className="truncate text-sm font-medium">{contact.first_name} {contact.last_name}</p>
+                <p className="truncate text-sm font-medium">
+                  {contact.first_name} {contact.last_name}
+                </p>
               </div>
               {company && <p className="truncate text-xs text-muted-foreground">{company.name}</p>}
-              {contact.email && <p className="truncate text-xs text-muted-foreground">{contact.email}</p>}
+              {contact.email && (
+                <p className="truncate text-xs text-muted-foreground">{contact.email}</p>
+              )}
             </div>
           </div>
         </CardContent>
@@ -87,13 +94,13 @@ function StatusColumn({
     <div
       ref={setNodeRef}
       className={`flex w-[260px] sm:w-[280px] shrink-0 flex-col rounded-lg border border-border transition-colors ${
-        isOver ? "bg-primary/5 border-primary/30" : "bg-muted/20"
+        isOver ? 'bg-primary/5 border-primary/30' : 'bg-muted/20'
       }`}
     >
       <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <Badge variant="secondary" className={`text-[10px] ${statusColors[status]}`}>
-            {statusLabels[status]}
+          <Badge variant="secondary" className={`text-[10px] ${CONTACT_STATUS[status].badgeClassName}`}>
+            {CONTACT_STATUS[status].label}
           </Badge>
           <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
             {contacts.length}
@@ -133,7 +140,9 @@ export function ContactsKanbanByStatus({
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
 
   const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 8 } });
-  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } });
+  const touchSensor = useSensor(TouchSensor, {
+    activationConstraint: { delay: 200, tolerance: 8 },
+  });
   const keyboardSensor = useSensor(KeyboardSensor);
   const sensors = useSensors(pointerSensor, touchSensor, keyboardSensor);
 
@@ -160,11 +169,11 @@ export function ContactsKanbanByStatus({
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-3 overflow-x-auto pb-4">
-        {STATUS_ORDER.map((status) => (
+        {CONTACT_STATUSES.map((status) => (
           <StatusColumn
             key={status}
             status={status}
-            contacts={contacts.filter((c) => (c.status || "lead") === status)}
+            contacts={contacts.filter((c) => (c.status || 'lead') === status)}
             companies={companies}
             onContactClick={onContactClick}
           />
@@ -176,7 +185,9 @@ export function ContactsKanbanByStatus({
           <div className="w-[260px] opacity-90">
             <Card className="border-primary bg-card shadow-lg">
               <CardContent className="p-3">
-                <p className="text-sm font-medium">{activeContact.first_name} {activeContact.last_name}</p>
+                <p className="text-sm font-medium">
+                  {activeContact.first_name} {activeContact.last_name}
+                </p>
                 <p className="text-xs text-muted-foreground">{activeContact.email}</p>
               </CardContent>
             </Card>

@@ -1,6 +1,6 @@
 {
-  "id": "flowcrm",
-  "name": "FlowCRM",
+  "id": "cellrm",
+  "name": "CellRM",
   "description": "CRM de vendas: contatos, empresas, negócios (Kanban/BANT), atividades, tarefas, metas e dashboard. Multi-tenant pelo gateway.",
   "version": "1.0.0",
   "engine": "vite-react-gateway",
@@ -8,16 +8,56 @@
   "migrations": ["0001_business_schema.sql"],
   "auth": { "provider": "better-auth", "roles": ["admin", "manager", "rep"] },
   "screens": [
-    { "id": "dashboard", "route": "/dashboard", "title": "Dashboard", "file": "src/screens/DashboardScreen" },
-    { "id": "contacts", "route": "/contacts", "title": "Contatos", "file": "src/screens/ContactsScreen" },
-    { "id": "companies", "route": "/companies", "title": "Empresas", "file": "src/screens/CompaniesScreen" },
+    {
+      "id": "dashboard",
+      "route": "/dashboard",
+      "title": "Dashboard",
+      "file": "src/screens/DashboardScreen"
+    },
+    {
+      "id": "contacts",
+      "route": "/contacts",
+      "title": "Contatos",
+      "file": "src/screens/ContactsScreen"
+    },
+    {
+      "id": "companies",
+      "route": "/companies",
+      "title": "Empresas",
+      "file": "src/screens/CompaniesScreen"
+    },
     { "id": "deals", "route": "/deals", "title": "Negócios", "file": "src/screens/DealsScreen" },
-    { "id": "deal-detail", "route": "/deals/:id", "title": "Detalhe do Negócio", "file": "src/screens/DealDetailScreen" },
-    { "id": "activities", "route": "/activities", "title": "Atividades", "file": "src/screens/ActivitiesScreen" },
+    {
+      "id": "deal-detail",
+      "route": "/deals/:id",
+      "title": "Detalhe do Negócio",
+      "file": "src/screens/DealDetailScreen"
+    },
+    {
+      "id": "activities",
+      "route": "/activities",
+      "title": "Atividades",
+      "file": "src/screens/ActivitiesScreen"
+    },
     { "id": "tasks", "route": "/tasks", "title": "Tarefas", "file": "src/screens/TasksScreen" },
-    { "id": "sales-goals", "route": "/sales-goals", "title": "Metas", "file": "src/screens/SalesGoalsScreen" },
-    { "id": "segments", "route": "/segments", "title": "Filtros Salvos", "file": "src/screens/SegmentsScreen" },
-    { "id": "settings", "route": "/settings", "title": "Configurações", "file": "src/screens/SettingsScreen" },
+    {
+      "id": "sales-goals",
+      "route": "/sales-goals",
+      "title": "Metas",
+      "file": "src/screens/SalesGoalsScreen"
+    },
+    {
+      "id": "segments",
+      "route": "/segments",
+      "title": "Filtros Salvos",
+      "file": "src/screens/SegmentsScreen"
+    },
+    {
+      "id": "settings",
+      "route": "/settings",
+      "title": "Configurações",
+      "file": "src/screens/SettingsScreen"
+    },
     { "id": "setup", "route": "/setup", "title": "Setup", "file": "src/screens/SetupScreen" },
     { "id": "login", "route": "/login", "title": "Entrar", "file": "src/screens/LoginScreen" }
   ],
@@ -33,6 +73,9 @@
       "src/lib/data/index.ts",
       "src/lib/constants.ts",
       "src/lib/format.ts",
+      "src/lib/domain.ts",
+      "src/lib/analytics.ts",
+      "src/lib/date.ts",
       "src/index.css"
     ],
     "protect": [
@@ -43,6 +86,8 @@
       "src/lib/utils.ts",
       "src/main.tsx",
       "vite.config.ts",
+      "vitest.config.ts",
+      "eslint.config.js",
       "components.json",
       "preview-fixtures.ts",
       "supabase/migrations/**"

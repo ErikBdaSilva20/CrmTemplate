@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { DealQualification } from "@/components/crm/DealQualification";
 import { Button } from "@/components/ui/button";
@@ -15,32 +15,38 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  ArrowLeft, Trophy, XCircle, Building2, User, Calendar, Percent,
-  Phone, Mail, FileText, CheckSquare, CalendarDays, Edit2, Check, X,
+  ArrowLeft, Trophy, XCircle, Building2, User, Calendar, Percent, Edit2, Check, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  getDeal, updateDeal, listStages, listActivitiesByDeal, createActivity,
-  getContact, getCompany,
-  type Deal, type PipelineStage, type Contact, type Company, type Activity, type ActivityType,
+  updateDeal, listActivitiesByDeal, createActivity,
+  type Activity, type ActivityType,
 } from "@/lib/data";
+import { useDeals } from "@/hooks/useDeals";
+import { useStages } from "@/hooks/usePipelines";
+import { useContacts } from "@/hooks/useContacts";
+import { useCompanies } from "@/hooks/useCompanies";
+import { useLossReasons } from "@/hooks/useLossReasons";
+import { invalidateActivities } from "@/hooks/useActivities";
+import { ACTIVITY_TYPE, ACTIVITY_TYPES } from "@/lib/domain";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
-
-const activityIcons: Record<ActivityType, React.ComponentType<{ className?: string }>> = {
-  call: Phone, email: Mail, meeting: CalendarDays, note: FileText, task: CheckSquare,
-};
-const activityLabels: Record<ActivityType, string> = {
-  call: "Ligação", email: "Email", meeting: "Reunião", note: "Nota", task: "Tarefa",
-};
 
 export default function DealDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [deal, setDeal] = useState<Deal | null>(null);
-  const [stages, setStages] = useState<PipelineStage[]>([]);
-  const [contact, setContact] = useState<Contact | null>(null);
-  const [company, setCompany] = useState<Company | null>(null);
+  // Sem get-by-id no modo genérico (§B5): o deal vem da mesma coleção
+  // cacheada usada por DealsScreen/Dashboard, e contato/empresa/estágios são
+  // resolvidos direto dos caches — sem waterfall de requisições sequenciais
+  // (AUDITORIA-CODIGO.md §1.2: antes eram 3 buscas encadeadas em série).
+  const { data: deals, loading: dealsLoading, refresh: refreshDeals } = useDeals();
+  const { data: stages } = useStages();
+  const { data: contacts } = useContacts();
+  const { data: companies } = useCompanies();
+  const { data: lossReasons } = useLossReasons();
+
+  const dealFromCache = useMemo(() => deals.find((d) => d.id === id) ?? null, [deals, id]);
+  const [deal, setDeal] = useState(dealFromCache);
   const [activities, setActivities] = useState<Activity[]>([]);
 
   const [editingTitle, setEditingTitle] = useState(false);
@@ -55,28 +61,22 @@ export default function DealDetailScreen() {
 
   const [activityForm, setActivityForm] = useState({ type: "note" as ActivityType, title: "", body: "" });
 
-  // Sem get-by-id no modo genérico → list-then-find (§B5). Relacionados cruzados no front.
-  const fetchDeal = useCallback(async () => {
+  useEffect(() => {
+    if (dealsLoading) return;
+    if (!dealFromCache) { navigate("/deals"); return; }
+    setDeal(dealFromCache);
+    setTitleDraft(dealFromCache.title);
+    setValueDraft(String(dealFromCache.value || 0));
+    setCurrencyDraft(dealFromCache.currency || "BRL");
+  }, [dealFromCache, dealsLoading, navigate]);
+
+  const fetchActivities = useCallback(async () => {
     if (!id) return;
-    const data = await getDeal(id);
-    if (!data) { navigate("/deals"); return; }
-    setDeal(data);
-    setTitleDraft(data.title);
-    setValueDraft(String(data.value || 0));
-    setCurrencyDraft(data.currency || "BRL");
-
-    const [stagesAll, acts] = await Promise.all([
-      listStages(),
-      listActivitiesByDeal(id),
-    ]);
-    setStages(stagesAll);
+    const acts = await listActivitiesByDeal(id);
     setActivities([...acts].sort((a, b) => (b.created_at || "").localeCompare(a.created_at || "")));
+  }, [id]);
 
-    setContact(data.contact_id ? await getContact(data.contact_id) : null);
-    setCompany(data.company_id ? await getCompany(data.company_id) : null);
-  }, [id, navigate]);
-
-  useEffect(() => { fetchDeal(); }, [fetchDeal]);
+  useEffect(() => { fetchActivities(); }, [fetchActivities]);
 
   if (!deal) {
     return (
@@ -85,6 +85,9 @@ export default function DealDetailScreen() {
       </div>
     );
   }
+
+  const contact = deal.contact_id ? contacts.find((c) => c.id === deal.contact_id) ?? null : null;
+  const company = deal.company_id ? companies.find((c) => c.id === deal.company_id) ?? null : null;
 
   const lastActivity = activities[0];
   const daysSinceActivity = lastActivity && lastActivity.created_at
@@ -102,6 +105,7 @@ export default function DealDetailScreen() {
     await updateDeal(deal.id, { title: titleDraft });
     setDeal({ ...deal, title: titleDraft });
     setEditingTitle(false);
+    refreshDeals();
     toast.success("Título atualizado");
   };
 
@@ -110,18 +114,21 @@ export default function DealDetailScreen() {
     await updateDeal(deal.id, { value: val, currency: currencyDraft });
     setDeal({ ...deal, value: val, currency: currencyDraft });
     setEditingValue(false);
+    refreshDeals();
     toast.success("Valor atualizado");
   };
 
   const changeStage = async (stageId: string) => {
     await updateDeal(deal.id, { stage_id: stageId });
     setDeal({ ...deal, stage_id: stageId });
+    refreshDeals();
     toast.success("Estágio atualizado");
   };
 
   const markAsWon = async () => {
     await updateDeal(deal.id, { status: "won" });
     setDeal({ ...deal, status: "won" });
+    refreshDeals();
     toast.success("Negócio marcado como ganho! 🎉");
   };
 
@@ -130,6 +137,7 @@ export default function DealDetailScreen() {
     await updateDeal(deal.id, { status: "lost", loss_reason: reason });
     setDeal({ ...deal, status: "lost", loss_reason: reason });
     setLossModalOpen(false);
+    refreshDeals();
     toast.success("Negócio marcado como perdido");
   };
 
@@ -141,7 +149,8 @@ export default function DealDetailScreen() {
       title: activityForm.title, body: activityForm.body || null,
     });
     setActivityForm({ type: "note", title: "", body: "" });
-    fetchDeal();
+    fetchActivities();
+    invalidateActivities();
     toast.success("Atividade adicionada");
   };
 
@@ -255,11 +264,9 @@ export default function DealDetailScreen() {
                 <Select value={activityForm.type} onValueChange={(v) => setActivityForm({ ...activityForm, type: v as ActivityType })}>
                   <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="note">Nota</SelectItem>
-                    <SelectItem value="call">Ligação</SelectItem>
-                    <SelectItem value="email">Email</SelectItem>
-                    <SelectItem value="meeting">Reunião</SelectItem>
-                    <SelectItem value="task">Tarefa</SelectItem>
+                    {ACTIVITY_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>{ACTIVITY_TYPE[t].label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <Input className="h-8 text-sm" placeholder="Título" value={activityForm.title} onChange={(e) => setActivityForm({ ...activityForm, title: e.target.value })} />
@@ -271,7 +278,7 @@ export default function DealDetailScreen() {
 
           <div className="space-y-1">
             {activities.map((a) => {
-              const Icon = activityIcons[a.type];
+              const Icon = ACTIVITY_TYPE[a.type].icon;
               return (
                 <div key={a.id} className="flex gap-3 rounded-lg border border-border p-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
@@ -279,7 +286,7 @@ export default function DealDetailScreen() {
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-xs font-medium text-muted-foreground">{activityLabels[a.type]}</span>
+                      <span className="text-xs font-medium text-muted-foreground">{ACTIVITY_TYPE[a.type].label}</span>
                       <span className="text-xs text-muted-foreground">
                         {formatDateTime(a.created_at)}
                       </span>
@@ -302,7 +309,7 @@ export default function DealDetailScreen() {
             dealId={deal.id}
             qualification={deal.qualification}
             qualificationScore={deal.qualification_score || 0}
-            onUpdate={fetchDeal}
+            onUpdate={refreshDeals}
           />
 
           <Card>
@@ -372,7 +379,8 @@ export default function DealDetailScreen() {
         </div>
       </div>
 
-      {/* Loss Reason Modal */}
+      {/* Loss Reason Modal — motivos vêm de listLossReasons() (Configurações), */}
+      {/* não mais uma lista fixa (AUDITORIA-CODIGO.md §4.1). */}
       <Dialog open={lossModalOpen} onOpenChange={setLossModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -385,13 +393,9 @@ export default function DealDetailScreen() {
               <Select value={lossReason} onValueChange={setLossReason}>
                 <SelectTrigger><SelectValue placeholder="Selecionar motivo" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Preço">Preço muito alto</SelectItem>
-                  <SelectItem value="Concorrência">Perdeu para concorrência</SelectItem>
-                  <SelectItem value="Timing">Timing inadequado</SelectItem>
-                  <SelectItem value="Budget">Sem orçamento</SelectItem>
-                  <SelectItem value="Fit">Produto não atende</SelectItem>
-                  <SelectItem value="Sem resposta">Sem resposta do cliente</SelectItem>
-                  <SelectItem value="Outro">Outro</SelectItem>
+                  {lossReasons.filter((lr) => lr.is_active).map((lr) => (
+                    <SelectItem key={lr.id} value={lr.label}>{lr.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -9,7 +9,9 @@ import {
 } from "@/components/ui/select";
 import { Building2, KanbanSquare, Check, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
-import { INDUSTRIES } from "@/lib/constants";
+import { INDUSTRIES, DEFAULT_STAGE_COLORS } from "@/lib/constants";
+import { invalidatePipelines, invalidateStages } from "@/hooks/usePipelines";
+import { invalidateCompanies } from "@/hooks/useCompanies";
 import { createCompany, createPipeline, createStage } from "@/lib/data";
 
 // Setup reduzido aos steps de DADOS (Importantdoc §6 / docs/10 §2.3): empresa-semente +
@@ -17,11 +19,11 @@ import { createCompany, createPipeline, createStage } from "@/lib/data";
 // owner_id é setado pelo gateway — não enviamos.
 
 const DEFAULT_STAGES = [
-  { name: "Lead", color: "#94a3b8", win_probability: 10 },
-  { name: "Qualificado", color: "#3b82f6", win_probability: 25 },
-  { name: "Proposta", color: "#f59e0b", win_probability: 50 },
-  { name: "Negociação", color: "#8b5cf6", win_probability: 75 },
-  { name: "Fechado", color: "#22c55e", win_probability: 100 },
+  { name: "Lead", color: DEFAULT_STAGE_COLORS[0], win_probability: 10 },
+  { name: "Qualificado", color: DEFAULT_STAGE_COLORS[1], win_probability: 25 },
+  { name: "Proposta", color: DEFAULT_STAGE_COLORS[2], win_probability: 50 },
+  { name: "Negociação", color: DEFAULT_STAGE_COLORS[3], win_probability: 75 },
+  { name: "Fechado", color: DEFAULT_STAGE_COLORS[4], win_probability: 100 },
 ];
 
 export default function SetupScreen() {
@@ -46,6 +48,7 @@ export default function SetupScreen() {
           domain: company.domain || null,
           industry: company.industry || null,
         });
+        invalidateCompanies();
       }
       const pipeline = await createPipeline({ name: pipelineName.trim() || "Pipeline de Vendas", is_default: true });
       if (pipeline?.id) {
@@ -54,6 +57,8 @@ export default function SetupScreen() {
           await createStage({ pipeline_id: pipeline.id, name: s.name, color: s.color, win_probability: s.win_probability, sort_order: i });
         }
       }
+      invalidatePipelines();
+      invalidateStages();
       toast.success("Tudo pronto!");
       navigate("/dashboard");
     } catch (e) {

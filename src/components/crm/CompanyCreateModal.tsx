@@ -17,7 +17,8 @@ import {
 import { Building2, X, Search, Users, Check } from "lucide-react";
 import { toast } from "sonner";
 import { INDUSTRIES, COMPANY_SIZES } from "@/lib/constants";
-import { createCompany, listContacts, updateContact, type Contact } from "@/lib/data";
+import { useContacts, invalidateContacts } from "@/hooks/useContacts";
+import { createCompany, updateContact } from "@/lib/data";
 
 interface CompanyCreateModalProps {
   open: boolean;
@@ -33,18 +34,15 @@ export function CompanyCreateModal({ open, onOpenChange, onCreated }: CompanyCre
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Contacts multi-select
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  // Contacts multi-select — reaproveita a cache compartilhada (§1.1).
+  const { data: contactsRaw } = useContacts();
+  const contacts = useMemo(
+    () => [...contactsRaw].sort((a, b) => a.first_name.localeCompare(b.first_name)),
+    [contactsRaw],
+  );
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
   const [contactSearch, setContactSearch] = useState("");
   const [contactsOpen, setContactsOpen] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    listContacts().then((data) =>
-      setContacts([...data].sort((a, b) => a.first_name.localeCompare(b.first_name))),
-    );
-  }, [open]);
 
   useEffect(() => {
     if (form.domain && form.domain.includes(".")) {
@@ -96,6 +94,7 @@ export function CompanyCreateModal({ open, onOpenChange, onCreated }: CompanyCre
         await Promise.all(
           selectedContactIds.map((cid) => updateContact(cid, { company_id: created.id })),
         );
+        invalidateContacts();
       }
 
       onOpenChange(false);

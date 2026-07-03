@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Kanban, List, TrendingUp, Plus, Filter, Settings2, Trash2, Loader2, Bookmark, X } from "lucide-react";
+import { Kanban, List, TrendingUp, Plus, Filter, Settings2, Bookmark, X } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -16,15 +16,17 @@ import { DealsKanban } from "@/components/crm/DealsKanban";
 import { DealsList } from "@/components/crm/DealsList";
 import { DealsForecast } from "@/components/crm/DealsForecast";
 import { DealsFilters, type DealFilters } from "@/components/crm/DealsFilters";
+import { PipelineEditor } from "@/components/crm/PipelineEditor";
 import { useAuth, roleAtLeast } from "@/lib/auth";
+import { useDeals } from "@/hooks/useDeals";
+import { useStages, usePipelines } from "@/hooks/usePipelines";
+import { useContacts } from "@/hooks/useContacts";
+import { useCompanies } from "@/hooks/useCompanies";
+import { useSegments } from "@/hooks/useSegments";
+import { useLossReasons } from "@/hooks/useLossReasons";
 import {
-  listDeals, createDeal, updateDeal, deleteDeal, moveDealToStage, markDealWon, markDealLost,
-  enrichDeals, type Deal, type DealWithRelations,
-  listContacts, type Contact,
-  listCompanies, type Company,
-  listPipelines, type Pipeline,
-  listStages, createStage, updateStage, deleteStage, type PipelineStage,
-  listSegments, type Segment,
+  createDeal, updateDeal, deleteDeal, moveDealToStage, markDealWon, markDealLost,
+  enrichDeals, type Deal, type Segment,
 } from "@/lib/data";
 
 type ViewMode = "kanban" | "list" | "forecast";
@@ -34,12 +36,36 @@ export default function DealsScreen() {
   const canManage = roleAtLeast(role, "manager"); // pipeline é lookup (admin/manager)
   const navigate = useNavigate();
 
-  const [deals, setDeals] = useState<DealWithRelations[]>([]);
-  const [stages, setStages] = useState<PipelineStage[]>([]);
-  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const { data: dealsRaw, refresh: refreshDeals } = useDeals();
+  const { data: stages, refresh: refreshStages } = useStages();
+  const { data: pipelines } = usePipelines();
+  const { data: contacts } = useContacts();
+  const { data: companies } = useCompanies();
+  const { data: allSegments } = useSegments();
+  const { data: lossReasons } = useLossReasons();
+
+  // Cache compartilhada (useDeals) + cruzamento local no front (enrichDeals),
+  // espelhado num state próprio para permitir atualização otimista no drag do
+  // kanban antes da confirmação do gateway.
+  const [deals, setDeals] = useState(() => enrichDeals(dealsRaw, contacts, companies));
+  useEffect(() => {
+    setDeals(enrichDeals(dealsRaw, contacts, companies));
+  }, [dealsRaw, contacts, companies]);
+
+  const segments = useMemo(
+    () => allSegments.filter((s) => (s.filters as Record<string, unknown>)?.entity === "deals"),
+    [allSegments],
+  );
+
   const [selectedPipeline, setSelectedPipeline] = useState<string>("");
+  useEffect(() => {
+    setSelectedPipeline((prev) => {
+      if (prev) return prev;
+      const def = pipelines.find((p) => p.is_default) || pipelines[0];
+      return def?.id ?? "";
+    });
+  }, [pipelines]);
+
   const [viewMode, setViewMode] = useState<ViewMode>("kanban");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState<Deal | null>(null);
@@ -48,7 +74,6 @@ export default function DealsScreen() {
   const [form, setForm] = useState<Partial<Deal>>({});
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<DealFilters>({});
-  const [segments, setSegments] = useState<Segment[]>([]);
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
 
   const [lossModalOpen, setLossModalOpen] = useState(false);
@@ -57,67 +82,7 @@ export default function DealsScreen() {
   const [lossNote, setLossNote] = useState("");
 
   const [selectedDeals, setSelectedDeals] = useState<Set<string>>(new Set());
-
   const [pipelineDialogOpen, setPipelineDialogOpen] = useState(false);
-  const [editingStages, setEditingStages] = useState<{ id?: string; name: string; color: string; win_probability: number; sort_order: number }[]>([]);
-  const [savingPipeline, setSavingPipeline] = useState(false);
-
-  const openPipelineEditor = () => {
-    const current = stages
-      .filter((s) => s.pipeline_id === selectedPipeline)
-      .sort((a, b) => a.sort_order - b.sort_order)
-      .map((s) => ({ id: s.id, name: s.name, color: s.color || "#94a3b8", win_probability: Number(s.win_probability) || 0, sort_order: s.sort_order }));
-    setEditingStages(current.length > 0 ? current : [{ name: "", color: "#94a3b8", win_probability: 50, sort_order: 0 }]);
-    setPipelineDialogOpen(true);
-  };
-
-  const addEditStage = () =>
-    setEditingStages([...editingStages, { name: "", color: "#94a3b8", win_probability: 50, sort_order: editingStages.length }]);
-  const removeEditStage = (idx: number) => setEditingStages(editingStages.filter((_, i) => i !== idx));
-  const updateEditStage = (idx: number, field: string, value: unknown) =>
-    setEditingStages(editingStages.map((s, i) => (i === idx ? { ...s, [field]: value } : s)));
-
-  const savePipelineStages = async () => {
-    if (!selectedPipeline) return;
-    setSavingPipeline(true);
-
-    const existingIds = editingStages.filter((s) => s.id).map((s) => s.id!);
-    const currentStageIds = stages.filter((s) => s.pipeline_id === selectedPipeline).map((s) => s.id);
-    const toDelete = currentStageIds.filter((id) => !existingIds.includes(id));
-    await Promise.all(toDelete.map((id) => deleteStage(id)));
-
-    for (let i = 0; i < editingStages.length; i++) {
-      const s = editingStages[i];
-      const payload = { name: s.name, color: s.color, win_probability: s.win_probability, sort_order: i, pipeline_id: selectedPipeline };
-      if (s.id) await updateStage(s.id, payload);
-      else await createStage(payload);
-    }
-
-    setSavingPipeline(false);
-    setPipelineDialogOpen(false);
-    toast.success("Pipeline atualizado!");
-    fetchData();
-  };
-
-  // Carrega tudo em paralelo e cruza no front (sem join, sem org_id, sem realtime).
-  const fetchData = useCallback(async () => {
-    const [dealsRaw, stagesAll, pipelinesAll, contactsAll, companiesAll, segsAll] = await Promise.all([
-      listDeals(), listStages(), listPipelines(), listContacts(), listCompanies(), listSegments(),
-    ]);
-    setStages(stagesAll);
-    setPipelines(pipelinesAll);
-    setContacts(contactsAll);
-    setCompanies(companiesAll);
-    setDeals(enrichDeals(dealsRaw, contactsAll, companiesAll));
-    setSegments(segsAll.filter((s) => (s.filters as Record<string, unknown>)?.entity === "deals"));
-    setSelectedPipeline((prev) => {
-      if (prev) return prev;
-      const def = pipelinesAll.find((p) => p.is_default) || pipelinesAll[0];
-      return def?.id ?? "";
-    });
-  }, []);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
 
   const applySegment = (seg: Segment) => {
     const f = seg.filters as Record<string, unknown>;
@@ -133,9 +98,10 @@ export default function DealsScreen() {
     setFilters({});
   };
 
-  const pipelineStages = stages
-    .filter((s) => s.pipeline_id === selectedPipeline)
-    .sort((a, b) => a.sort_order - b.sort_order);
+  const pipelineStages = useMemo(
+    () => stages.filter((s) => s.pipeline_id === selectedPipeline).sort((a, b) => a.sort_order - b.sort_order),
+    [stages, selectedPipeline],
+  );
 
   const filteredDeals = deals.filter((d) => {
     if (filters.minValue && (Number(d.value) || 0) < filters.minValue) return false;
@@ -152,6 +118,7 @@ export default function DealsScreen() {
   const handleDragEnd = async (dealId: string, newStageId: string) => {
     setDeals((prev) => prev.map((d) => (d.id === dealId ? { ...d, stage_id: newStageId } : d)));
     await moveDealToStage(dealId, newStageId);
+    refreshDeals();
   };
 
   const openNew = (stageId?: string) => {
@@ -161,20 +128,13 @@ export default function DealsScreen() {
   };
 
   useEffect(() => {
-    if (shouldOpenNew && pipelineStages.length > 0) {
-      openNew();
-      searchParams.delete("action");
-      setSearchParams(searchParams, { replace: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldOpenNew, pipelineStages]);
-
-  const openEdit = (deal: Deal) => {
-    setEditing(deal);
-    setForm(deal);
+    if (!shouldOpenNew || pipelineStages.length === 0) return;
+    setEditing(null);
+    setForm({ title: "", value: 0, currency: "BRL", stage_id: pipelineStages[0]?.id, status: "open", probability: 0 });
     setSheetOpen(true);
-  };
-  void openEdit; // disponível para telas/handlers que editem via Sheet
+    searchParams.delete("action");
+    setSearchParams(searchParams, { replace: true });
+  }, [shouldOpenNew, pipelineStages, searchParams, setSearchParams]);
 
   // owner_id NUNCA é enviado — o gateway o seta pela sessão.
   const handleSave = async () => {
@@ -194,7 +154,7 @@ export default function DealsScreen() {
         });
       }
       setSheetOpen(false);
-      fetchData();
+      refreshDeals();
       toast.success(editing ? "Negócio atualizado" : "Negócio criado");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao salvar");
@@ -203,7 +163,7 @@ export default function DealsScreen() {
 
   const onMarkWon = async (dealId: string) => {
     await markDealWon(dealId);
-    fetchData();
+    refreshDeals();
     toast.success("Negócio marcado como ganho! 🎉");
   };
 
@@ -219,7 +179,7 @@ export default function DealsScreen() {
     const reason = lossNote ? `${lossReason}: ${lossNote}` : lossReason;
     await markDealLost(lossDealId, reason);
     setLossModalOpen(false);
-    fetchData();
+    refreshDeals();
     toast.success("Negócio marcado como perdido");
   };
 
@@ -236,7 +196,7 @@ export default function DealsScreen() {
       toast.success(`${ids.length} negócios marcados como perdidos`);
     }
     setSelectedDeals(new Set());
-    fetchData();
+    refreshDeals();
   };
 
   const openDeals = filteredDeals.filter((d) => d.status === "open");
@@ -288,7 +248,7 @@ export default function DealsScreen() {
           )}
 
           {canManage && (
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={openPipelineEditor} aria-label="Personalizar pipeline">
+            <Button variant="outline" size="icon" className="h-8 w-8" disabled={!selectedPipeline} onClick={() => setPipelineDialogOpen(true)} aria-label="Personalizar pipeline">
               <Settings2 className="h-3.5 w-3.5" />
             </Button>
           )}
@@ -423,7 +383,7 @@ export default function DealsScreen() {
         </SheetContent>
       </Sheet>
 
-      {/* Loss Reason Modal */}
+      {/* Loss Reason Modal — motivos vêm de listLossReasons(), não mais lista fixa (§4.1) */}
       <Dialog open={lossModalOpen} onOpenChange={setLossModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -436,13 +396,9 @@ export default function DealsScreen() {
               <Select value={lossReason} onValueChange={setLossReason}>
                 <SelectTrigger><SelectValue placeholder="Selecionar motivo" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Preço">Preço muito alto</SelectItem>
-                  <SelectItem value="Concorrência">Perdeu para concorrência</SelectItem>
-                  <SelectItem value="Timing">Timing inadequado</SelectItem>
-                  <SelectItem value="Budget">Sem orçamento</SelectItem>
-                  <SelectItem value="Fit">Produto não atende</SelectItem>
-                  <SelectItem value="Sem resposta">Sem resposta do cliente</SelectItem>
-                  <SelectItem value="Outro">Outro</SelectItem>
+                  {lossReasons.filter((lr) => lr.is_active).map((lr) => (
+                    <SelectItem key={lr.id} value={lr.label}>{lr.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -458,58 +414,14 @@ export default function DealsScreen() {
         </DialogContent>
       </Dialog>
 
-      {/* Pipeline Customization Dialog (admin/manager) */}
-      <Dialog open={pipelineDialogOpen} onOpenChange={setPipelineDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Personalizar Pipeline</DialogTitle>
-            <DialogDescription>Edite os estágios do seu pipeline de vendas</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-            {editingStages.map((stage, idx) => (
-              <div key={idx} className="flex flex-wrap items-center gap-2">
-                <input
-                  type="color"
-                  value={stage.color}
-                  onChange={(e) => updateEditStage(idx, "color", e.target.value)}
-                  className="h-8 w-8 shrink-0 cursor-pointer rounded border-0"
-                  aria-label={`Cor do estágio ${idx + 1}`}
-                />
-                <Input
-                  value={stage.name}
-                  onChange={(e) => updateEditStage(idx, "name", e.target.value)}
-                  placeholder={`Estágio ${idx + 1}`}
-                  className="min-w-0 flex-1"
-                />
-                <div className="flex shrink-0 items-center gap-1">
-                  <Input
-                    type="number" min={0} max={100}
-                    value={stage.win_probability}
-                    onChange={(e) => updateEditStage(idx, "win_probability", Number(e.target.value))}
-                    className="w-14 text-center text-xs"
-                  />
-                  <span className="text-xs text-muted-foreground">%</span>
-                </div>
-                {editingStages.length > 1 && (
-                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removeEditStage(idx)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-              </div>
-            ))}
-            <Button variant="outline" size="sm" onClick={addEditStage}>
-              <Plus className="mr-1 h-3.5 w-3.5" />Adicionar estágio
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPipelineDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={savePipelineStages} disabled={savingPipeline || editingStages.some((s) => !s.name.trim())}>
-              {savingPipeline && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Pipeline Customization Dialog (admin/manager) — componente compartilhado com Configurações (§3.2) */}
+      <PipelineEditor
+        open={pipelineDialogOpen}
+        onOpenChange={setPipelineDialogOpen}
+        pipelineId={selectedPipeline}
+        stages={stages.filter((s) => s.pipeline_id === selectedPipeline)}
+        onSaved={refreshStages}
+      />
     </div>
   );
 }

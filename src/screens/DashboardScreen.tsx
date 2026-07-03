@@ -15,13 +15,21 @@ import {
   Target, Clock, AlertTriangle, RefreshCw, ArrowRight,
   CalendarDays, BarChart3,
 } from "lucide-react";
-import {
-  listDeals, listStages, listActivities, listContacts, listPipelines,
-  type Deal, type PipelineStage, type Activity, type Contact, type Pipeline,
-} from "@/lib/data";
+import { useDeals } from "@/hooks/useDeals";
+import { useStages, usePipelines } from "@/hooks/usePipelines";
+import { useActivities } from "@/hooks/useActivities";
+import { useContacts } from "@/hooks/useContacts";
+import { useSalesGoals } from "@/hooks/useSalesGoals";
 import { formatCurrencyCompact as fmt } from "@/lib/format";
+import { DEFAULT_MONTHLY_REVENUE_GOAL } from "@/lib/constants";
+import {
+  computePercentage, getPeriodStart, isInPeriod, computeAverageSalesCycleDays,
+  computePreviousPeriodRevenue, computeMonthlyRevenue, computeFunnel, computeAtRiskDeals,
+  computeActivitiesByType, computeActivitiesByDayOfWeek, computeNewLeadsByStatus,
+  type PeriodFilter,
+} from "@/lib/analytics";
 
-const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0);
+const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 const tooltipStyle = {
   backgroundColor: "hsl(var(--popover))",
@@ -41,27 +49,6 @@ const CHART_COLORS = [
   "hsl(262, 72%, 60%)", // roxo
   "hsl(43, 75%, 62%)",  // ouro claro
 ];
-
-const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-
-type PeriodFilter = "today" | "this_week" | "this_month" | "this_quarter" | "this_year" | "all";
-
-function getPeriodStart(period: PeriodFilter): Date | null {
-  const now = new Date();
-  switch (period) {
-    case "today": return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    case "this_week": { const d = new Date(now); d.setDate(d.getDate() - d.getDay()); d.setHours(0, 0, 0, 0); return d; }
-    case "this_month": return new Date(now.getFullYear(), now.getMonth(), 1);
-    case "this_quarter": return new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-    case "this_year": return new Date(now.getFullYear(), 0, 1);
-    case "all": return null;
-  }
-}
-
-function inPeriod(dateStr: string | null, start: Date | null): boolean {
-  if (!start || !dateStr) return true;
-  return new Date(dateStr) >= start;
-}
 
 // ── Gauge component ─────────────────────────
 function GaugeChart({ value, max, label }: { value: number; max: number; label: string }) {
@@ -97,40 +84,32 @@ function GaugeChart({ value, max, label }: { value: number; max: number; label: 
 export default function DashboardScreen() {
   const navigate = useNavigate();
 
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [stages, setStages] = useState<PipelineStage[]>([]);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [lastRefresh, setLastRefresh] = useState(new Date());
+  const { data: deals, loading: dealsLoading, refresh: refreshDeals } = useDeals();
+  const { data: stages, refresh: refreshStages } = useStages();
+  const { data: activities, refresh: refreshActivities } = useActivities();
+  const { data: contacts, refresh: refreshContacts } = useContacts();
+  const { data: pipelines, refresh: refreshPipelines } = usePipelines();
+  const { data: salesGoals, refresh: refreshSalesGoals } = useSalesGoals();
 
+  const [lastRefresh, setLastRefresh] = useState(new Date());
   const [period, setPeriod] = useState<PeriodFilter>("this_month");
   const [pipelineFilter, setPipelineFilter] = useState("all");
 
-  const monthlyGoal = 100000;
-
-  // Sem org_id, sem RPC — agrega no front sobre os repos.
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    const [dealsAll, stagesAll, activitiesAll, contactsAll, pipelinesAll] = await Promise.all([
-      listDeals(), listStages(), listActivities(), listContacts(), listPipelines(),
-    ]);
-    setDeals(dealsAll);
-    setStages(stagesAll);
-    setActivities(activitiesAll);
-    setContacts(contactsAll);
-    setPipelines(pipelinesAll);
-    setLoading(false);
+  // Estável via useCallback (as próprias refreshX vêm de useCallback([])
+  // dentro de data-cache.ts) — evita reintroduzir o anti-padrão do
+  // eslint-disable que a auditoria original mandou eliminar (§5.4).
+  const refreshAll = useCallback(() => {
     setLastRefresh(new Date());
-  }, []);
-
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+    return Promise.all([
+      refreshDeals(), refreshStages(), refreshActivities(),
+      refreshContacts(), refreshPipelines(), refreshSalesGoals(),
+    ]);
+  }, [refreshDeals, refreshStages, refreshActivities, refreshContacts, refreshPipelines, refreshSalesGoals]);
 
   useEffect(() => {
-    const timer = setInterval(fetchAll, 5 * 60 * 1000);
+    const timer = setInterval(refreshAll, REFRESH_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [fetchAll]);
+  }, [refreshAll]);
 
   const periodStart = getPeriodStart(period);
 
@@ -144,144 +123,60 @@ export default function DashboardScreen() {
   }, [deals, pipelineFilter, stages]);
 
   const periodDeals = useMemo(() =>
-    filteredDeals.filter((d) => inPeriod(d.created_at, periodStart)),
+    filteredDeals.filter((d) => isInPeriod(d.created_at, periodStart)),
     [filteredDeals, periodStart]
   );
 
   const filteredActivities = useMemo(() =>
-    activities.filter((a) => inPeriod(a.created_at, periodStart)),
+    activities.filter((a) => isInPeriod(a.created_at, periodStart)),
     [activities, periodStart]
   );
 
   // ── KPIs ───────────────────────────
   const wonDeals = periodDeals.filter((d) => d.status === "won");
-  const lostDeals = periodDeals.filter((d) => d.status === "lost");
   const openDeals = filteredDeals.filter((d) => d.status === "open");
-  const totalClosed = wonDeals.length + lostDeals.length;
+  const totalClosed = wonDeals.length + periodDeals.filter((d) => d.status === "lost").length;
   const wonRevenue = wonDeals.reduce((s, d) => s + (Number(d.value) || 0), 0);
-  const winRate = pct(wonDeals.length, totalClosed);
+  const winRate = computePercentage(wonDeals.length, totalClosed);
   const avgTicket = wonDeals.length > 0 ? wonRevenue / wonDeals.length : 0;
   const pipelineValue = openDeals.reduce((s, d) => s + (Number(d.value) || 0), 0);
+  const avgCycle = useMemo(() => computeAverageSalesCycleDays(wonDeals), [wonDeals]);
 
-  const avgCycle = useMemo(() => {
-    if (wonDeals.length === 0) return 0;
-    const total = wonDeals.reduce((s, d) => {
-      const created = new Date(d.created_at);
-      const updated = d.updated_at ? new Date(d.updated_at) : new Date();
-      return s + Math.floor((updated.getTime() - created.getTime()) / 86400000);
-    }, 0);
-    return Math.round(total / wonDeals.length);
-  }, [wonDeals]);
+  const prevPeriodRevenue = useMemo(
+    () => computePreviousPeriodRevenue(filteredDeals, period),
+    [filteredDeals, period],
+  );
+  const revenueVariation = prevPeriodRevenue > 0
+    ? Math.round(((wonRevenue - prevPeriodRevenue) / prevPeriodRevenue) * 100)
+    : 0;
 
-  const prevPeriodRevenue = useMemo(() => {
-    if (period === "all") return 0;
-    const now = new Date();
-    let prevStart: Date;
-    let prevEnd: Date;
-    switch (period) {
-      case "this_month":
-        prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        prevEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-        break;
-      case "this_quarter": {
-        const qStart = Math.floor(now.getMonth() / 3) * 3;
-        prevStart = new Date(now.getFullYear(), qStart - 3, 1);
-        prevEnd = new Date(now.getFullYear(), qStart, 0);
-        break;
-      }
-      default:
-        return 0;
-    }
-    return filteredDeals
-      .filter((d) => d.status === "won" && d.created_at && new Date(d.created_at) >= prevStart && new Date(d.created_at) <= prevEnd)
-      .reduce((s, d) => s + (Number(d.value) || 0), 0);
-  }, [filteredDeals, period]);
-
-  const revenueVariation = prevPeriodRevenue > 0 ? Math.round(((wonRevenue - prevPeriodRevenue) / prevPeriodRevenue) * 100) : 0;
-
-  const monthlyRevenue = useMemo(() => {
-    const now = new Date();
-    const data: { month: string; receita: number; tendencia: number }[] = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthWon = filteredDeals.filter((deal) => {
-        if (deal.status !== "won" || !deal.created_at) return false;
-        const c = new Date(deal.created_at);
-        return c.getFullYear() === d.getFullYear() && c.getMonth() === d.getMonth();
-      });
-      data.push({
-        month: MONTHS_PT[d.getMonth()],
-        receita: monthWon.reduce((s, deal) => s + (Number(deal.value) || 0), 0),
-        tendencia: 0,
-      });
-    }
-    for (let i = 0; i < data.length; i++) {
-      const window = data.slice(Math.max(0, i - 2), i + 1);
-      data[i].tendencia = Math.round(window.reduce((s, d) => s + d.receita, 0) / window.length);
-    }
-    return data;
-  }, [filteredDeals]);
+  const monthlyRevenue = useMemo(() => computeMonthlyRevenue(filteredDeals), [filteredDeals]);
 
   const funnelData = useMemo(() => {
     const pipeStages = pipelineFilter !== "all"
       ? stages.filter((s) => s.pipeline_id === pipelineFilter)
       : stages;
-    return [...pipeStages].sort((a, b) => a.sort_order - b.sort_order).map((s) => {
-      const stageDeals = openDeals.filter((d) => d.stage_id === s.id);
-      return {
-        name: s.name,
-        count: stageDeals.length,
-        value: stageDeals.reduce((sum, d) => sum + (Number(d.value) || 0), 0),
-        color: s.color || "hsl(var(--primary))",
-      };
-    });
+    return computeFunnel(pipeStages, openDeals);
   }, [stages, openDeals, pipelineFilter]);
 
-  const actByType = useMemo(() => {
-    const map: Record<string, number> = {};
-    filteredActivities.forEach((a) => { map[a.type] = (map[a.type] || 0) + 1; });
-    const labels: Record<string, string> = { call: "Ligação", email: "Email", meeting: "Reunião", note: "Nota", task: "Tarefa" };
-    return Object.entries(map).map(([type, count]) => ({ name: labels[type] || type, value: count }));
-  }, [filteredActivities]);
+  const actByType = useMemo(() => computeActivitiesByType(filteredActivities), [filteredActivities]);
+  const actByDay = useMemo(() => computeActivitiesByDayOfWeek(filteredActivities), [filteredActivities]);
+  const atRiskDeals = useMemo(() => computeAtRiskDeals(openDeals), [openDeals]);
+  const newLeadsByStatus = useMemo(
+    () => computeNewLeadsByStatus(contacts, periodStart),
+    [contacts, periodStart],
+  );
 
-  const actByDay = useMemo(() => {
-    const days = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-    const counts = new Array(7).fill(0);
-    filteredActivities.forEach((a) => {
-      if (a.created_at) counts[new Date(a.created_at).getDay()]++;
-    });
-    return days.map((d, i) => ({ day: d, count: counts[i] }));
-  }, [filteredActivities]);
-
-  const atRiskDeals = useMemo(() => {
+  // Meta do mês: primeira meta de receita cadastrada para o período atual em
+  // sales_goals; sem meta cadastrada, cai no fallback de constants.ts
+  // (antes era sempre `const monthlyGoal = 100000` — AUDITORIA-CODIGO.md §4.2).
+  const monthlyGoal = useMemo(() => {
     const now = new Date();
-    const fourteenDaysAgo = new Date(now.getTime() - 14 * 86400000);
-    const sevenDaysFromNow = new Date(now.getTime() + 7 * 86400000);
-
-    const inactive = openDeals.filter((d) => {
-      if (!d.updated_at) return true;
-      return new Date(d.updated_at) < fourteenDaysAgo;
-    }).sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0)).slice(0, 5);
-
-    const closingSoon = openDeals.filter((d) => {
-      if (!d.close_date) return false;
-      const cd = new Date(d.close_date);
-      return cd <= sevenDaysFromNow && (Number(d.probability) || 0) < 50;
-    }).sort((a, b) => new Date(a.close_date!).getTime() - new Date(b.close_date!).getTime());
-
-    return { inactive, closingSoon };
-  }, [openDeals]);
-
-  const newLeadsByStatus = useMemo(() => {
-    const periodContacts = contacts.filter((c) => inPeriod(c.created_at, periodStart));
-    const map: Record<string, number> = {};
-    periodContacts.forEach((c) => {
-      const s = c.status || "lead";
-      map[s] = (map[s] || 0) + 1;
-    });
-    const labels: Record<string, string> = { lead: "Lead", prospect: "Prospect", customer: "Cliente", churned: "Churned" };
-    return Object.entries(map).map(([k, v]) => ({ name: labels[k] || k, value: v }));
-  }, [contacts, periodStart]);
+    const goal = salesGoals.find(
+      (g) => g.goal_type === "revenue" && g.period_month === now.getMonth() + 1 && g.period_year === now.getFullYear(),
+    );
+    return goal ? Number(goal.target_value) || DEFAULT_MONTHLY_REVENUE_GOAL : DEFAULT_MONTHLY_REVENUE_GOAL;
+  }, [salesGoals]);
 
   return (
     <div className="space-y-5">
@@ -316,8 +211,8 @@ export default function DashboardScreen() {
                 </SelectContent>
               </Select>
             )}
-            <Button variant="outline" size="sm" className="h-8" onClick={fetchAll} disabled={loading}>
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            <Button variant="outline" size="sm" className="h-8" onClick={refreshAll} disabled={dealsLoading}>
+              <RefreshCw className={`h-3.5 w-3.5 ${dealsLoading ? "animate-spin" : ""}`} />
             </Button>
           </div>
         </div>
@@ -391,7 +286,7 @@ export default function DashboardScreen() {
               <Users className="h-3.5 w-3.5 text-primary" />
             </div>
             <p className="text-xl font-bold">{contacts.length}</p>
-            <p className="text-[10px] text-muted-foreground">{contacts.filter((c) => inPeriod(c.created_at, periodStart)).length} novos</p>
+            <p className="text-[10px] text-muted-foreground">{contacts.filter((c) => isInPeriod(c.created_at, periodStart)).length} novos</p>
           </CardContent>
         </Card>
       </div>

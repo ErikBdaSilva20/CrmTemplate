@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,11 +21,11 @@ import {
   Plus, Clock, AlertTriangle, Trash2, Edit2, MoreHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  listTasks, createActivity, updateActivity, deleteActivity, toggleTaskDone,
-  listContacts, listDeals,
-  type Activity, type Contact, type Deal,
-} from "@/lib/data";
+import { useActivities } from "@/hooks/useActivities";
+import { useContacts } from "@/hooks/useContacts";
+import { useDeals } from "@/hooks/useDeals";
+import { createActivity, updateActivity, deleteActivity, toggleTaskDone, type Activity } from "@/lib/data";
+import { startOfDay, endOfDay, getWeekRange } from "@/lib/date";
 import { formatDateShort } from "@/lib/format";
 
 type DateFilter = "todo" | "overdue" | "today" | "tomorrow" | "this_week" | "done";
@@ -39,23 +39,18 @@ const dateFilterLabels: Record<DateFilter, string> = {
   done: "Concluídas",
 };
 
-function startOfDay(d: Date) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
-function endOfDay(d: Date) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999); }
-
-function getWeekRange() {
-  const now = new Date();
-  const day = now.getDay();
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  return { start: startOfDay(monday), end: endOfDay(sunday) };
-}
-
 export default function TasksScreen() {
-  const [tasks, setTasks] = useState<Activity[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [deals, setDeals] = useState<Deal[]>([]);
+  const { data: activities, refresh: refreshActivities } = useActivities();
+  const { data: contacts } = useContacts();
+  const { data: deals } = useDeals();
+
+  // Tarefas = activities com type="task" (activities.repo.ts) — mesma cache
+  // de ActivitiesScreen, só filtrada no front.
+  const tasks = useMemo(
+    () => [...activities].filter((a) => a.type === "task").sort((a, b) => (a.due_date || "9999").localeCompare(b.due_date || "9999")),
+    [activities],
+  );
+
   const [dateFilter, setDateFilter] = useState<DateFilter>("todo");
   const [createOpen, setCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState<Activity | null>(null);
@@ -67,28 +62,14 @@ export default function TasksScreen() {
   const [formContactId, setFormContactId] = useState("none");
   const [formDealId, setFormDealId] = useState("none");
 
-  // Sem org_id; tarefas = activities type='task' (repo). O gateway isola por tenant.
-  const fetchData = useCallback(async () => {
-    const [tasksAll, contactsAll, dealsAll] = await Promise.all([
-      listTasks(), listContacts(), listDeals(),
-    ]);
-    setTasks(
-      [...tasksAll].sort((a, b) => (a.due_date || "9999").localeCompare(b.due_date || "9999")),
-    );
-    setContacts(contactsAll);
-    setDeals(dealsAll);
-  }, []);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
-
   const toggleComplete = async (task: Activity) => {
     await toggleTaskDone(task.id, !task.completed_at);
-    fetchData();
+    refreshActivities();
   };
 
   const removeTask = async (id: string) => {
     await deleteActivity(id);
-    fetchData();
+    refreshActivities();
     toast.success("Tarefa excluída");
   };
 
@@ -123,7 +104,7 @@ export default function TasksScreen() {
       }
       return true;
     });
-  }, [tasks, dateFilter, contacts, deals]);
+  }, [tasks, dateFilter]);
 
   const counts = useMemo(() => {
     const now = new Date();
@@ -186,7 +167,7 @@ export default function TasksScreen() {
         toast.success("Tarefa criada");
       }
       setCreateOpen(false);
-      fetchData();
+      refreshActivities();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao salvar");
     }

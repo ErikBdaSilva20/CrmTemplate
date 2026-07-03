@@ -1,6 +1,6 @@
 # Third-party / Origem
 
-Este template foi **portado** a partir do projeto interno **FlowCRM** (gerado via Lovable —
+Este template foi **portado** a partir do projeto interno **CellRM** (gerado via Lovable —
 Vite + React + shadcn/ui + Supabase). O backend original (Supabase: 15 Edge Functions, RLS,
 `profiles`/`user_roles`/`org_id`, realtime) foi **descartado**; o front foi reconstruído como
 SPA pura falando apenas com o `tenant-gateway` (Better-Auth + `/data/:table`), conforme
@@ -17,7 +17,7 @@ SPA pura falando apenas com o `tenant-gateway` (Better-Auth + `/data/:table`), c
 ## Markup adaptado
 
 As telas e componentes em `src/screens/**` e `src/components/crm/**` derivam do markup do
-FlowCRM (projeto interno). Nenhum código de OSS de terceiros com licença restritiva foi copiado.
+CellRM (projeto interno). Nenhum código de OSS de terceiros com licença restritiva foi copiado.
 
 ## Logos de empresas
 

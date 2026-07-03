@@ -40,7 +40,7 @@ export function AppHeader() {
     { label: 'Nova Atividade', icon: ClipboardList, path: '/activities?action=new' },
   ];
 
-  const parts: { label: string; href?: string }[] = [{ label: 'FlowCRM', href: '/dashboard' }];
+  const parts: { label: string; href?: string }[] = [{ label: 'CellRM', href: '/dashboard' }];
 
   if (location.pathname.startsWith('/deals/') && location.pathname !== '/deals') {
     parts.push({ label: 'Negócios', href: '/deals' });
