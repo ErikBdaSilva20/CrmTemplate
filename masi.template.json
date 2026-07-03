@@ -80,6 +80,7 @@
     ],
     "protect": [
       "src/lib/data/client.ts",
+      "src/lib/data/mock-auth.ts",
       "src/lib/data/types.gen.ts",
       "src/lib/auth.tsx",
       "src/components/ui/**",
@@ -89,7 +90,6 @@
       "vitest.config.ts",
       "eslint.config.js",
       "components.json",
-      "preview-fixtures.ts",
       "supabase/migrations/**"
     ]
   },

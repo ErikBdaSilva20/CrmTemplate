@@ -11,7 +11,32 @@
 --   • id uuid PK + created_at/updated_at; updated_at via trigger touch_updated_at.
 --   • Lookups (config read-only pro rep): SEM owner_id — pipelines, pipeline_stages,
 --     tags, loss_reasons.
+--
+-- ── COMO RODAR ISTO NO POSTGRES LOCAL (docker-compose.yml) ───────────────────
+-- Suba o container (`docker compose up -d`) e aplique este arquivo com:
+--
+--     docker compose exec -T db psql -U masia -d tenant_local < supabase/migrations/0001_business_schema.sql
+--
+-- (rode a partir da raiz do projeto; `db` é o nome do serviço no docker-compose.yml,
+-- não depende do container_name). Idempotente — pode rodar de novo sem quebrar
+-- (`create table if not exists` / `do $$ ... exception when duplicate_object`).
 -- =============================================================================
+
+-- =============================================================================
+-- ⚠️ STUB SÓ PARA LOCAL — tabela "user" do Better-Auth.
+-- Em produção (Neon do tenant) essa tabela já existe: o gateway a cria ANTES
+-- desta migration rodar (ver cabeçalho acima). O docker-compose.yml deste repo
+-- sobe só o Postgres, sem gateway — sem isto, toda FK `owner_id references
+-- "user"(id)` abaixo falharia com "relation user does not exist".
+-- NÃO rode este bloco contra o Neon/staging/produção: lá a tabela real do
+-- Better-Auth já existe e tem colunas adicionais que este stub não replica.
+-- =============================================================================
+create table if not exists "user" (
+  id         text primary key,
+  email      text,
+  name       text,
+  created_at timestamptz not null default now()
+);
 
 -- ---------- Enums de domínio (lowercase, ok no modo genérico) ----------
 do $$ begin
