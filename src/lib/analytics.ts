@@ -145,6 +145,24 @@ export function computeStageDeals(openDeals: Deal[], stageId: string): Deal[] {
     .sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0));
 }
 
+// Deals mais relevantes para o card de resumo do Dashboard: maior
+// qualification_score primeiro, depois maior valor, depois close_date mais
+// próxima (deals sem close_date ficam por último).
+export function selectTopDeals<T extends Deal>(openDeals: T[], limit = 4): T[] {
+  return [...openDeals]
+    .sort((a, b) => {
+      const scoreDiff = (b.qualification_score || 0) - (a.qualification_score || 0);
+      if (scoreDiff !== 0) return scoreDiff;
+      const valueDiff = (Number(b.value) || 0) - (Number(a.value) || 0);
+      if (valueDiff !== 0) return valueDiff;
+      if (!a.close_date && !b.close_date) return 0;
+      if (!a.close_date) return 1;
+      if (!b.close_date) return -1;
+      return new Date(a.close_date).getTime() - new Date(b.close_date).getTime();
+    })
+    .slice(0, limit);
+}
+
 export interface AtRiskDeals {
   inactive: Deal[];
   closingSoon: Deal[];

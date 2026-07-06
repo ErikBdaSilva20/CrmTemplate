@@ -1,6 +1,6 @@
 import type { DealWithRelations, PipelineStage } from '@/lib/data';
 import { formatCurrency } from '@/lib/format';
-import { QualificationBar } from '@/components/crm/DealQualification';
+import { QualificationBar } from '@/components/crm/QualificationBar';
 import {
   DndContext,
   DragEndEvent,

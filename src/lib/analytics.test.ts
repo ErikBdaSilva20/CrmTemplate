@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   computePercentage, getPeriodStart, computeFunnel, computeAtRiskDeals,
   computeMonthlyRevenue, computePreviousPeriodRevenue, computeAverageSalesCycleDays,
-  computeStageDeals,
+  computeStageDeals, selectTopDeals,
 } from "./analytics";
 import type { Deal, PipelineStage } from "./data";
 
@@ -99,6 +99,38 @@ describe("computeStageDeals", () => {
   it("returns an empty array when the stage has no deals", () => {
     const deals = [makeDeal({ id: "d1", stage_id: "s1", value: 100 })];
     expect(computeStageDeals(deals, "s2")).toEqual([]);
+  });
+});
+
+describe("selectTopDeals", () => {
+  it("sorts by qualification_score desc, then value desc, then close_date asc", () => {
+    const deals = [
+      makeDeal({ id: "low-score", qualification_score: 25, value: 999, close_date: "2026-01-01" }),
+      makeDeal({ id: "high-score-far", qualification_score: 75, value: 100, close_date: "2026-06-01" }),
+      makeDeal({ id: "high-score-near", qualification_score: 75, value: 100, close_date: "2026-02-01" }),
+      makeDeal({ id: "high-score-more-value", qualification_score: 75, value: 500, close_date: "2026-03-01" }),
+    ];
+    const result = selectTopDeals(deals);
+    expect(result.map((d) => d.id)).toEqual([
+      "high-score-more-value",
+      "high-score-near",
+      "high-score-far",
+      "low-score",
+    ]);
+  });
+
+  it("caps at the given limit (default 4)", () => {
+    const deals = Array.from({ length: 6 }, (_, i) => makeDeal({ id: `d${i}`, value: i }));
+    expect(selectTopDeals(deals)).toHaveLength(4);
+    expect(selectTopDeals(deals, 2)).toHaveLength(2);
+  });
+
+  it("sorts deals without a close_date after deals with one, when score and value tie", () => {
+    const deals = [
+      makeDeal({ id: "no-date", qualification_score: 50, value: 100, close_date: null }),
+      makeDeal({ id: "has-date", qualification_score: 50, value: 100, close_date: "2026-01-01" }),
+    ];
+    expect(selectTopDeals(deals).map((d) => d.id)).toEqual(["has-date", "no-date"]);
   });
 });
 
