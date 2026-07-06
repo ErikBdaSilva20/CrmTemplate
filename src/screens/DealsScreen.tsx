@@ -7,16 +7,16 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Kanban, List, TrendingUp, Plus, Filter, Settings2, Bookmark, X } from "lucide-react";
+import { Kanban, List, Plus, Filter, Settings2, Bookmark, X } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { DealsKanban } from "@/components/crm/DealsKanban";
 import { DealsList } from "@/components/crm/DealsList";
-import { DealsForecast } from "@/components/crm/DealsForecast";
 import { DealsFilters, type DealFilters } from "@/components/crm/DealsFilters";
 import { PipelineEditor } from "@/components/crm/PipelineEditor";
+import { MonthYearSelect } from "@/components/crm/MonthYearSelect";
 import { useAuth, roleAtLeast } from "@/lib/auth";
 import { useDeals } from "@/hooks/useDeals";
 import { useStages, usePipelines } from "@/hooks/usePipelines";
@@ -29,7 +29,12 @@ import {
   enrichDeals, type Deal, type Segment,
 } from "@/lib/data";
 
-type ViewMode = "kanban" | "list" | "forecast";
+type ViewMode = "kanban" | "list";
+
+function currentMonthCloseDate(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+}
 
 export default function DealsScreen() {
   const { role } = useAuth();
@@ -123,14 +128,14 @@ export default function DealsScreen() {
 
   const openNew = (stageId?: string) => {
     setEditing(null);
-    setForm({ title: "", value: 0, currency: "BRL", stage_id: stageId || pipelineStages[0]?.id, status: "open", probability: 0 });
+    setForm({ title: "", value: 0, currency: "BRL", stage_id: stageId || pipelineStages[0]?.id, status: "open", probability: 0, close_date: currentMonthCloseDate() });
     setSheetOpen(true);
   };
 
   useEffect(() => {
     if (!shouldOpenNew || pipelineStages.length === 0) return;
     setEditing(null);
-    setForm({ title: "", value: 0, currency: "BRL", stage_id: pipelineStages[0]?.id, status: "open", probability: 0 });
+    setForm({ title: "", value: 0, currency: "BRL", stage_id: pipelineStages[0]?.id, status: "open", probability: 0, close_date: currentMonthCloseDate() });
     setSheetOpen(true);
     searchParams.delete("action");
     setSearchParams(searchParams, { replace: true });
@@ -213,7 +218,6 @@ export default function DealsScreen() {
             {[
               { mode: "kanban" as const, icon: Kanban, label: "Kanban" },
               { mode: "list" as const, icon: List, label: "Lista" },
-              { mode: "forecast" as const, icon: TrendingUp, label: "Previsão" },
             ].map(({ mode, icon: Icon, label }) => (
               <button
                 key={mode}
@@ -308,8 +312,6 @@ export default function DealsScreen() {
         />
       )}
 
-      {viewMode === "forecast" && <DealsForecast deals={openDeals} stages={pipelineStages} />}
-
       {/* Create/Edit Sheet — sem "Responsável" (owner_id é do gateway) */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="w-full overflow-y-auto sm:w-[480px] sm:max-w-[480px]">
@@ -321,6 +323,11 @@ export default function DealsScreen() {
             <div className="space-y-2">
               <Label>Título</Label>
               <Input value={form.title || ""} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Nome do negócio" />
+            </div>
+            <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+              <p><strong className="text-foreground">Valor</strong>: quanto esse negócio representa em receita.</p>
+              <p><strong className="text-foreground">Probabilidade</strong>: chance estimada (%) de fechar, usada para priorizar o funil.</p>
+              <p><strong className="text-foreground">Fechamento</strong>: mês/ano em que esse negócio deve fechar (fechamento recorrente).</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -375,7 +382,7 @@ export default function DealsScreen() {
               </div>
               <div className="space-y-2">
                 <Label>Fechamento</Label>
-                <Input type="date" value={form.close_date || ""} onChange={(e) => setForm({ ...form, close_date: e.target.value })} />
+                <MonthYearSelect value={form.close_date} onChange={(v) => setForm({ ...form, close_date: v })} />
               </div>
             </div>
             <Button onClick={handleSave} className="w-full">{editing ? "Salvar" : "Criar Negócio"}</Button>
