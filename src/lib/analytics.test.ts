@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   computePercentage, getPeriodStart, computeFunnel, computeAtRiskDeals,
   computeMonthlyRevenue, computePreviousPeriodRevenue, computeAverageSalesCycleDays,
+  computeStageDeals,
 } from "./analytics";
 import type { Deal, PipelineStage } from "./data";
 
@@ -79,8 +80,25 @@ describe("computeFunnel", () => {
     ];
     const funnel = computeFunnel(stages, deals);
     expect(funnel.map((f) => f.name)).toEqual(["Lead", "Proposal"]);
-    expect(funnel[0]).toMatchObject({ count: 2, value: 300 });
-    expect(funnel[1]).toMatchObject({ count: 1, value: 50 });
+    expect(funnel[0]).toMatchObject({ id: "s1", count: 2, value: 300 });
+    expect(funnel[1]).toMatchObject({ id: "s2", count: 1, value: 50 });
+  });
+});
+
+describe("computeStageDeals", () => {
+  it("filters deals by stage and sorts by value descending", () => {
+    const deals = [
+      makeDeal({ id: "d1", stage_id: "s1", value: 100 }),
+      makeDeal({ id: "d2", stage_id: "s1", value: 300 }),
+      makeDeal({ id: "d3", stage_id: "s2", value: 999 }),
+    ];
+    const result = computeStageDeals(deals, "s1");
+    expect(result.map((d) => d.id)).toEqual(["d2", "d1"]);
+  });
+
+  it("returns an empty array when the stage has no deals", () => {
+    const deals = [makeDeal({ id: "d1", stage_id: "s1", value: 100 })];
+    expect(computeStageDeals(deals, "s2")).toEqual([]);
   });
 });
 

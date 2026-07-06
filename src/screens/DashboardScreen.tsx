@@ -13,7 +13,7 @@ import {
 import {
   DollarSign, Users, Handshake, TrendingUp, TrendingDown,
   Target, Clock, AlertTriangle, RefreshCw, ArrowRight,
-  CalendarDays, BarChart3,
+  CalendarDays, BarChart3, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { useDeals } from "@/hooks/useDeals";
 import { useStages, usePipelines } from "@/hooks/usePipelines";
@@ -26,8 +26,11 @@ import {
   computePercentage, getPeriodStart, isInPeriod, computeAverageSalesCycleDays,
   computePreviousPeriodRevenue, computeMonthlyRevenue, computeFunnel, computeAtRiskDeals,
   computeActivitiesByType, computeActivitiesByDayOfWeek, computeNewLeadsByStatus,
+  computeStageDeals,
   type PeriodFilter,
 } from "@/lib/analytics";
+
+const MAX_VISIBLE_STAGE_DEALS = 4;
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -94,6 +97,16 @@ export default function DashboardScreen() {
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [period, setPeriod] = useState<PeriodFilter>("this_month");
   const [pipelineFilter, setPipelineFilter] = useState("all");
+  const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set());
+
+  const toggleStage = (stageId: string) => {
+    setExpandedStages((prev) => {
+      const next = new Set(prev);
+      if (next.has(stageId)) next.delete(stageId);
+      else next.add(stageId);
+      return next;
+    });
+  };
 
   // Estável via useCallback (as próprias refreshX vêm de useCallback([])
   // dentro de data-cache.ts) — evita reintroduzir o anti-padrão do
@@ -342,15 +355,29 @@ export default function DashboardScreen() {
               <div className="space-y-2">
                 {funnelData.map((s) => {
                   const maxVal = Math.max(...funnelData.map((f) => f.value), 1);
+                  const isExpanded = expandedStages.has(s.id);
+                  const panelId = `stage-deals-${s.id}`;
+                  const visibleDeals = isExpanded ? computeStageDeals(openDeals, s.id).slice(0, MAX_VISIBLE_STAGE_DEALS) : [];
+                  const remaining = isExpanded ? s.count - visibleDeals.length : 0;
+
                   return (
-                    <div key={s.name}>
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-xs font-medium">{s.name}</span>
+                    <div key={s.id}>
+                      <button
+                        type="button"
+                        onClick={() => toggleStage(s.id)}
+                        className="flex w-full items-center justify-between mb-0.5 text-left hover:opacity-80 transition-opacity"
+                        aria-expanded={isExpanded}
+                        aria-controls={panelId}
+                      >
+                        <span className="flex items-center gap-1 text-xs font-medium">
+                          {isExpanded ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                          {s.name}
+                        </span>
                         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                           <span>{s.count} negócios</span>
                           <span className="font-medium text-foreground">{fmt(s.value)}</span>
                         </div>
-                      </div>
+                      </button>
                       <div className="h-5 rounded bg-muted overflow-hidden">
                         <div
                           className="h-full rounded transition-all flex items-center justify-end pr-1"
@@ -360,6 +387,30 @@ export default function DashboardScreen() {
                           }}
                         />
                       </div>
+                      {isExpanded && (
+                        <div id={panelId} role="region" className="mt-1.5 space-y-1 rounded-md border border-border bg-muted/20 p-1.5">
+                          {visibleDeals.length > 0 ? (
+                            <>
+                              {visibleDeals.map((d) => (
+                                <button
+                                  key={d.id}
+                                  type="button"
+                                  onClick={() => navigate(`/deals/${d.id}`)}
+                                  className="flex w-full items-center justify-between gap-2 rounded px-1.5 py-1 text-xs text-left hover:bg-accent/50 transition-colors"
+                                >
+                                  <span className="min-w-0 flex-1 truncate">{d.title}</span>
+                                  <span className="shrink-0 font-medium text-foreground">{fmt(Number(d.value) || 0)}</span>
+                                </button>
+                              ))}
+                              {remaining > 0 && (
+                                <p className="px-1.5 text-[10px] text-muted-foreground">+{remaining} mais</p>
+                              )}
+                            </>
+                          ) : (
+                            <p className="px-1.5 py-1 text-[10px] text-muted-foreground">Nenhum negócio neste estágio</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

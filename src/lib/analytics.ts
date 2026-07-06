@@ -115,6 +115,7 @@ export function computeMonthlyRevenue(deals: Deal[], now = new Date()): MonthlyR
 }
 
 export interface FunnelStage {
+  id: string;
   name: string;
   count: number;
   value: number;
@@ -127,12 +128,21 @@ export function computeFunnel(stages: PipelineStage[], openDeals: Deal[]): Funne
     .map((stage) => {
       const stageDeals = openDeals.filter((d) => d.stage_id === stage.id);
       return {
+        id: stage.id,
         name: stage.name,
         count: stageDeals.length,
         value: stageDeals.reduce((sum, d) => sum + (Number(d.value) || 0), 0),
         color: stage.color || "hsl(var(--primary))",
       };
     });
+}
+
+// Deals for one stage, highest value first — feeds the Dashboard's
+// expandable "Pipeline por Estágio" rows.
+export function computeStageDeals(openDeals: Deal[], stageId: string): Deal[] {
+  return openDeals
+    .filter((d) => d.stage_id === stageId)
+    .sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0));
 }
 
 export interface AtRiskDeals {
