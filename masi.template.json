@@ -88,6 +88,8 @@
       "src/main.tsx",
       "vite.config.ts",
       "vitest.config.ts",
+      "src/server.ts",
+      "tsconfig.server.json",
       "eslint.config.js",
       "components.json",
       "supabase/migrations/**"
