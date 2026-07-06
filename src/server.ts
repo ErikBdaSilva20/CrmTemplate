@@ -59,6 +59,16 @@ async function resolveOwner(): Promise<string> {
   return created.rows[0].id;
 }
 
+// Sem tela mesmo: isto é só a API do gateway (CRUD genérico), não o app. Uma
+// rota "/" amigável evita que abrir http://localhost:8080 direto no navegador
+// pareça um servidor quebrado (404 puro do Hono).
+app.get("/", (c) =>
+  c.json({
+    status: "ok",
+    message: "Mock gateway (100% local) — só API, sem tela. O app roda em http://localhost:5174.",
+  }),
+);
+
 app.get("/health", (c) => c.json({ status: "ok" }));
 
 // ── CRUD genérico (plano, sem get-by-id — Importantdoc §B5) ─────────────────
