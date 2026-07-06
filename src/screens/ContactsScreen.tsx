@@ -1,84 +1,43 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Plus,
-  LayoutGrid,
-  List,
-  Filter,
-  ArrowUpDown,
-  Upload,
-  Download,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
-  X,
-  AlertTriangle,
-  Columns3,
-  Search,
-} from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ContactsKanbanByStatus } from '@/components/crm/ContactsKanbanByStatus';
 import { ContactDrawer } from '@/components/crm/ContactDrawer';
 import { ContactCreateModal } from '@/components/crm/ContactCreateModal';
 import { CSVImportModal } from '@/components/crm/CSVImportModal';
+import {
+  ContactsToolbar, type ContactFilters, type ContactsViewMode,
+} from '@/components/crm/contacts/ContactsToolbar';
+import { ContactsTable, type ContactsSortDir, type ContactsSortKey } from '@/components/crm/contacts/ContactsTable';
+import { ContactsCardGrid } from '@/components/crm/contacts/ContactsCardGrid';
 import { useContacts } from '@/hooks/useContacts';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useActivities } from '@/hooks/useActivities';
 import { CONTACT_STATUS, CONTACT_STATUSES } from '@/lib/domain';
 import { updateContact, deleteContact, type Contact, type ContactStatus } from '@/lib/data';
-import { formatDate } from '@/lib/format';
 import { exportToCsv, type CsvColumn } from '@/lib/csv';
-
-type SortKey = 'name' | 'email' | 'status' | 'created_at' | 'title';
-type SortDir = 'asc' | 'desc';
-type ViewMode = 'table' | 'cards' | 'status';
 
 const PAGE_SIZE = 50;
 
-interface ContactFilters {
-  status?: string;
-  companyId?: string;
-  createdFrom?: string;
-  createdTo?: string;
-}
-
+// Orquestrador de layout: busca os dados, mantém filtros/ordenação/seleção
+// e delega toda a renderização visual para components/crm/contacts/**
+// (Masia Clone-Template Audit Framework §4/§6.1).
 export default function ContactsScreen() {
   const { data: contactsRaw, refresh: refreshContacts } = useContacts();
   const { data: companies } = useCompanies();
   const { data: activities } = useActivities();
 
-  const [viewMode, setViewMode] = useState<ViewMode>('table');
-  const [sortKey, setSortKey] = useState<SortKey>('created_at');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [viewMode, setViewMode] = useState<ContactsViewMode>('table');
+  const [sortKey, setSortKey] = useState<ContactsSortKey>('created_at');
+  const [sortDir, setSortDir] = useState<ContactsSortDir>('desc');
   const [page, setPage] = useState(0);
   const [filters, setFilters] = useState<ContactFilters>({});
   const [search, setSearch] = useState('');
@@ -130,13 +89,6 @@ export default function ContactsScreen() {
     });
     return map;
   }, [activities]);
-
-  const getInactivityDays = (contactId: string, createdAt: string | null) => {
-    const lastAct = lastActivityMap.get(contactId);
-    const ref = lastAct || (createdAt ? new Date(createdAt) : null);
-    if (!ref) return null;
-    return Math.floor((Date.now() - ref.getTime()) / 86400000);
-  };
 
   // Mudar status (substitui o drag de owner do CellRM). Atualização
   // otimista local + invalidação da cache compartilhada em seguida.
@@ -194,7 +146,7 @@ export default function ContactsScreen() {
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
   const paginated = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  const toggleSort = (key: SortKey) => {
+  const toggleSort = (key: ContactsSortKey) => {
     if (sortKey === key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
     else {
       setSortKey(key);
@@ -244,180 +196,23 @@ export default function ContactsScreen() {
     toast.success('CSV exportado');
   };
 
-  const SortHeader = ({ label, field }: { label: string; field: SortKey }) => (
-    <button
-      onClick={() => toggleSort(field)}
-      className="flex items-center gap-1 hover:text-foreground transition-colors"
-    >
-      {label}
-      <ArrowUpDown className="h-3 w-3" />
-    </button>
-  );
-
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Contatos</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground">{filtered.length} contatos</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative w-full sm:w-56">
-            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar nome, email ou telefone"
-              className="h-8 pl-7 pr-7 text-xs"
-              aria-label="Buscar contatos"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                aria-label="Limpar busca"
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-          <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
-            <button
-              onClick={() => setViewMode('table')}
-              aria-label="Visualização tabela"
-              className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === 'table' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              <List className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Tabela</span>
-            </button>
-            <button
-              onClick={() => setViewMode('cards')}
-              aria-label="Visualização cartões"
-              className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === 'cards' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Cartões</span>
-            </button>
-            <button
-              onClick={() => setViewMode('status')}
-              aria-label="Visualização funil por status"
-              className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === 'status' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              <Columns3 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Funil</span>
-            </button>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowFilters(!showFilters)}
-            aria-label="Alternar filtros"
-          >
-            <Filter className="mr-1 h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Filtros</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCsvOpen(true)}
-            aria-label="Importar CSV"
-            className="hidden sm:flex"
-          >
-            <Upload className="mr-1.5 h-3.5 w-3.5" />
-            Importar
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={exportCSV}
-            aria-label="Exportar CSV"
-            className="hidden sm:flex"
-          >
-            <Download className="mr-1.5 h-3.5 w-3.5" />
-            Exportar
-          </Button>
-          <Button onClick={() => setCreateOpen(true)} aria-label="Criar novo contato">
-            <Plus className="mr-1 sm:mr-2 h-4 w-4" />
-            <span className="hidden sm:inline">Novo Contato</span>
-            <span className="sm:hidden">Novo</span>
-          </Button>
-        </div>
-      </div>
-
-      {/* Filters */}
-      {showFilters && (
-        <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-muted/30 p-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Status</Label>
-            <Select
-              value={filters.status || 'all'}
-              onValueChange={(v) => setFilters({ ...filters, status: v === 'all' ? undefined : v })}
-            >
-              <SelectTrigger className="w-32 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {CONTACT_STATUSES.map((status) => (
-                  <SelectItem key={status} value={status}>{CONTACT_STATUS[status].label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Empresa</Label>
-            <Select
-              value={filters.companyId || 'all'}
-              onValueChange={(v) =>
-                setFilters({ ...filters, companyId: v === 'all' ? undefined : v })
-              }
-            >
-              <SelectTrigger className="w-40 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas</SelectItem>
-                {companies.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Criado de</Label>
-            <Input
-              type="date"
-              className="w-36 h-8 text-xs"
-              value={filters.createdFrom ?? ''}
-              onChange={(e) => setFilters({ ...filters, createdFrom: e.target.value || undefined })}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">até</Label>
-            <Input
-              type="date"
-              className="w-36 h-8 text-xs"
-              value={filters.createdTo ?? ''}
-              onChange={(e) => setFilters({ ...filters, createdTo: e.target.value || undefined })}
-            />
-          </div>
-          {Object.values(filters).some(Boolean) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => setFilters({})}
-            >
-              <X className="mr-1 h-3 w-3" />
-              Limpar
-            </Button>
-          )}
-        </div>
-      )}
+      <ContactsToolbar
+        filteredCount={filtered.length}
+        search={search}
+        onSearchChange={setSearch}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        showFilters={showFilters}
+        onToggleFilters={() => setShowFilters(!showFilters)}
+        filters={filters}
+        onFiltersChange={setFilters}
+        companies={companies}
+        onImportClick={() => setCsvOpen(true)}
+        onExportClick={exportCSV}
+        onCreateClick={() => setCreateOpen(true)}
+      />
 
       {/* Batch Actions */}
       {selectedContacts.size > 0 && (
@@ -425,9 +220,7 @@ export default function ContactsScreen() {
           <span className="text-sm font-medium">{selectedContacts.size} selecionados</span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline">
-                Mudar Status
-              </Button>
+              <Button size="sm" variant="outline">Mudar Status</Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               {CONTACT_STATUSES.map((status) => (
@@ -444,167 +237,24 @@ export default function ContactsScreen() {
         </div>
       )}
 
-      {/* Table View */}
       {viewMode === 'table' && (
-        <div className="rounded-md border border-border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    checked={allSelected}
-                    onCheckedChange={toggleAll}
-                    aria-label="Selecionar todos"
-                  />
-                </TableHead>
-                <TableHead>
-                  <SortHeader label="Nome" field="name" />
-                </TableHead>
-                <TableHead className="hidden sm:table-cell">
-                  <SortHeader label="Email" field="email" />
-                </TableHead>
-                <TableHead className="hidden md:table-cell">Empresa</TableHead>
-                <TableHead className="hidden lg:table-cell">
-                  <SortHeader label="Cargo" field="title" />
-                </TableHead>
-                <TableHead className="hidden lg:table-cell">Telefone</TableHead>
-                <TableHead>
-                  <SortHeader label="Status" field="status" />
-                </TableHead>
-                <TableHead className="hidden md:table-cell">
-                  <SortHeader label="Criado em" field="created_at" />
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginated.map((c) => (
-                <TableRow key={c.id} className="cursor-pointer" onClick={() => setDrawerContactId(c.id)}>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Checkbox
-                      checked={selectedContacts.has(c.id)}
-                      onCheckedChange={() => toggleOne(c.id)}
-                      aria-label={`Selecionar ${c.first_name}`}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-8 w-8 shrink-0">
-                        <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                          {c.first_name[0]}
-                          {c.last_name?.[0] || ''}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-medium truncate">
-                            {c.first_name} {c.last_name}
-                          </span>
-                          {(() => {
-                            const days = getInactivityDays(c.id, c.created_at);
-                            if (days === null || days < 14) return null;
-                            const isHigh = days >= 21;
-                            return (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span
-                                      className={`inline-flex items-center gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded ${isHigh ? 'bg-destructive/10 text-destructive' : 'bg-warning/10 text-warning'}`}
-                                    >
-                                      <AlertTriangle className="h-2.5 w-2.5" />
-                                      {days}d
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" className="text-xs">
-                                    {days} dias sem atividade
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            );
-                          })()}
-                        </div>
-                        <span className="text-xs text-muted-foreground truncate block sm:hidden">
-                          {c.email}
-                        </span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground hidden sm:table-cell">
-                    {c.email}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground hidden md:table-cell text-xs">
-                    {companies.find((co) => co.id === c.company_id)?.name || '—'}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground hidden lg:table-cell">
-                    {c.title}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground hidden lg:table-cell">
-                    {c.phone}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className={CONTACT_STATUS[c.status || 'lead'].badgeClassName}>
-                      {CONTACT_STATUS[c.status || 'lead'].label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-xs hidden md:table-cell">
-                    {formatDate(c.created_at)}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {paginated.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
-                    Nenhum contato encontrado
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+        <ContactsTable
+          contacts={paginated}
+          companies={companies}
+          lastActivityMap={lastActivityMap}
+          onSort={toggleSort}
+          selectedContacts={selectedContacts}
+          allSelected={allSelected}
+          onToggleAll={toggleAll}
+          onToggleOne={toggleOne}
+          onRowClick={setDrawerContactId}
+        />
       )}
 
-      {/* Card View */}
       {viewMode === 'cards' && (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-          {paginated.map((c) => (
-            <Card
-              key={c.id}
-              className="cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => setDrawerContactId(c.id)}
-            >
-              <CardContent className="p-4 space-y-2">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-10 w-10">
-                    <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                      {c.first_name[0]}
-                      {c.last_name?.[0] || ''}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="overflow-hidden">
-                    <p className="font-medium truncate">
-                      {c.first_name} {c.last_name}
-                    </p>
-                    {c.title && <p className="text-xs text-muted-foreground truncate">{c.title}</p>}
-                  </div>
-                </div>
-                {c.email && <p className="text-xs text-muted-foreground truncate">{c.email}</p>}
-                <Badge
-                  variant="secondary"
-                  className={`text-[10px] ${CONTACT_STATUS[c.status || 'lead'].badgeClassName}`}
-                >
-                  {CONTACT_STATUS[c.status || 'lead'].label}
-                </Badge>
-              </CardContent>
-            </Card>
-          ))}
-          {paginated.length === 0 && (
-            <div className="col-span-full py-10 text-center text-muted-foreground">
-              Nenhum contato encontrado
-            </div>
-          )}
-        </div>
+        <ContactsCardGrid contacts={paginated} onCardClick={setDrawerContactId} />
       )}
 
-      {/* Status Funnel Kanban */}
       {viewMode === 'status' && (
         <ContactsKanbanByStatus
           contacts={sorted}
@@ -621,20 +271,10 @@ export default function ContactsScreen() {
             Página {page + 1} de {totalPages} · {sorted.length} contatos
           </span>
           <div className="flex gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page === 0}
-              onClick={() => setPage(page - 1)}
-            >
+            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= totalPages - 1}
-              onClick={() => setPage(page + 1)}
-            >
+            <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
