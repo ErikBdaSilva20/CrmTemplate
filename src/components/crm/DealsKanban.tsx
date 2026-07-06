@@ -1,5 +1,6 @@
 import type { DealWithRelations, PipelineStage } from '@/lib/data';
 import { formatCurrency } from '@/lib/format';
+import { QualificationBar } from '@/components/crm/DealQualification';
 import {
   DndContext,
   DragEndEvent,
@@ -106,6 +107,11 @@ function DealCard({
               </button>
             )}
           </div>
+          {(deal.qualification_score ?? 0) > 0 && (
+            <div className="mt-1.5">
+              <QualificationBar score={deal.qualification_score} />
+            </div>
+          )}
         </div>
       </div>
     </div>

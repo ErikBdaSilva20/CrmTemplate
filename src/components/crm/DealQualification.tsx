@@ -88,6 +88,9 @@ export function DealQualification({ dealId, qualification, onUpdate }: Props) {
         <div className="h-2 rounded-full bg-muted overflow-hidden">
           <div className={`h-full rounded-full transition-all ${getProgressColor(score)}`} style={{ width: `${score}%` }} />
         </div>
+        <p className="text-[10px] text-muted-foreground">
+          São {bantCriteria.length} critérios ({bantCriteria.map((c) => c.label).join(", ")}) e cada um marcado como <strong>Sim</strong> vale {100 / bantCriteria.length}%. <strong>Não</strong> e <strong>N/A</strong> não somam pontos — o score mostra quantos critérios já foram confirmados positivamente, não quantos foram respondidos.
+        </p>
 
         <div className="space-y-2">
           {bantCriteria.map(({ key, label, description, icon }) => {
@@ -164,7 +167,14 @@ export function LeadScoreBadge({ score }: { score: number }) {
 export function QualificationBar({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-1.5">
-      <div className="h-1.5 w-16 rounded-full bg-muted overflow-hidden">
+      <div
+        className="h-1.5 w-16 rounded-full bg-muted overflow-hidden"
+        role="progressbar"
+        aria-label="Qualificação BANT"
+        aria-valuenow={score}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
         <div className={`h-full rounded-full ${getProgressColor(score)}`} style={{ width: `${score}%` }} />
       </div>
       <span className={`text-[9px] font-bold ${getScoreColor(score)}`}>{score}%</span>
