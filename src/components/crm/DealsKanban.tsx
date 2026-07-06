@@ -1,12 +1,21 @@
-import { useState } from "react";
-import { Plus, Trophy, XCircle, ChevronDown, ChevronRight, GripVertical } from "lucide-react";
+import type { DealWithRelations, PipelineStage } from '@/lib/data';
+import { formatCurrency } from '@/lib/format';
 import {
-  DndContext, closestCenter, DragEndEvent, DragOverlay, DragStartEvent,
-  PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
-  useDraggable, useDroppable,
-} from "@dnd-kit/core";
-import type { DealWithRelations, PipelineStage } from "@/lib/data";
-import { formatCurrency } from "@/lib/format";
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import { ChevronDown, ChevronRight, GripVertical, Plus, Trophy, XCircle } from 'lucide-react';
+import { useState } from 'react';
 
 type Stage = PipelineStage;
 
@@ -23,22 +32,25 @@ function DealCard({
   onClick: () => void;
   onMoveStage: (stageId: string) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: deal.id });
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: deal.id,
+  });
   const style = transform
     ? { transform: `translate(${transform.x}px, ${transform.y}px)`, zIndex: 50 }
     : undefined;
 
   const subtitleParts: string[] = [];
   if (deal.company) subtitleParts.push(deal.company.name);
-  if (deal.contact) subtitleParts.push(`${deal.contact.first_name} ${deal.contact.last_name || ""}`.trim());
-  const subtitle = subtitleParts.join(", ");
+  if (deal.contact)
+    subtitleParts.push(`${deal.contact.first_name} ${deal.contact.last_name || ''}`.trim());
+  const subtitle = subtitleParts.join(', ');
 
   const orderedStages = [...stages].sort((a, b) => a.sort_order - b.sort_order);
   const currentIdx = orderedStages.findIndex((s) => s.id === deal.stage_id);
   const nextStage = orderedStages[currentIdx + 1];
 
   return (
-    <div ref={setNodeRef} style={style} className={isDragging ? "opacity-40" : ""}>
+    <div ref={setNodeRef} style={style} className={isDragging ? 'opacity-40' : ''}>
       <div className="flex items-stretch rounded-md border border-border bg-card transition-all hover:shadow-md">
         {/* Drag handle — touch-none só aqui, não bloqueia o clique no card */}
         <button
@@ -64,17 +76,29 @@ function DealCard({
           )}
           <div className="mt-1.5 flex items-center justify-between gap-1">
             <span className="flex items-center gap-1 text-xs font-semibold text-foreground">
-              <svg className="h-3 w-3 shrink-0 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              <svg
+                className="h-3 w-3 shrink-0 text-muted-foreground"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="12" y1="1" x2="12" y2="23" />
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
               </svg>
-              {formatCurrency(Number(deal.value) || 0, deal.currency || "BRL")}
+              {formatCurrency(Number(deal.value) || 0, deal.currency || 'BRL')}
             </span>
 
             {/* Botão de avanço de estágio — visível só no mobile */}
             {nextStage && (
               <button
                 className="flex shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors sm:hidden"
-                onClick={(e) => { e.stopPropagation(); onMoveStage(nextStage.id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMoveStage(nextStage.id);
+                }}
                 aria-label={`Mover para ${nextStage.name}`}
               >
                 <span className="max-w-[60px] truncate">{nextStage.name}</span>
@@ -111,19 +135,24 @@ function StageColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex w-[220px] sm:w-[240px] shrink-0 flex-col transition-colors ${isOver ? "bg-primary/5" : ""}`}
+      className={`flex w-[220px] sm:w-[240px] shrink-0 flex-col transition-colors ${isOver ? 'bg-primary/5' : ''}`}
     >
       <div className="mb-1 px-1">
         <h3 className="text-[13px] font-bold text-foreground leading-tight">{stage.name}</h3>
         <div className="flex items-center gap-1">
-          <span className="text-[11px] text-muted-foreground font-medium">{formatCurrency(total)}</span>
+          <span className="text-[11px] text-muted-foreground font-medium">
+            {formatCurrency(total)}
+          </span>
           <span className="text-[11px] text-muted-foreground">
-            · {deals.length} {deals.length === 1 ? "negócio" : "negócios"}
+            · {deals.length} {deals.length === 1 ? 'negócio' : 'negócios'}
           </span>
         </div>
       </div>
 
-      <div className="h-1 w-full rounded-full mb-2" style={{ backgroundColor: stage.color || "hsl(var(--primary))" }} />
+      <div
+        className="h-1 w-full rounded-full mb-2"
+        style={{ backgroundColor: stage.color || 'hsl(var(--primary))' }}
+      />
 
       <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto max-h-[calc(100vh-240px)] pr-0.5">
         {deals.map((deal) => (
@@ -149,7 +178,11 @@ function StageColumn({
 /* ── Collapsible Won/Lost ────────────────────────────────── */
 
 function CollapsibleStatusColumn({
-  title, icon: Icon, deals, color, onDealClick,
+  title,
+  icon: Icon,
+  deals,
+  color,
+  onDealClick,
 }: {
   title: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -170,11 +203,17 @@ function CollapsibleStatusColumn({
         <div className="flex items-center gap-2">
           <Icon className={`h-4 w-4 ${color}`} />
           <span className="text-sm font-semibold">{title}</span>
-          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{deals.length}</span>
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            {deals.length}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">{formatCurrency(total)}</span>
-          {collapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+          {collapsed ? (
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          )}
         </div>
       </button>
       {!collapsed && (
@@ -186,9 +225,11 @@ function CollapsibleStatusColumn({
               onClick={() => onDealClick(deal)}
             >
               <p className="truncate text-[13px] font-medium">{deal.title}</p>
-              {deal.company && <p className="truncate text-[11px] text-muted-foreground">{deal.company.name}</p>}
+              {deal.company && (
+                <p className="truncate text-[11px] text-muted-foreground">{deal.company.name}</p>
+              )}
               <p className={`text-xs font-semibold mt-0.5 ${color}`}>
-                {formatCurrency(Number(deal.value) || 0, deal.currency || "BRL")}
+                {formatCurrency(Number(deal.value) || 0, deal.currency || 'BRL')}
               </p>
             </div>
           ))}
@@ -201,7 +242,10 @@ function CollapsibleStatusColumn({
 /* ── Won/Lost Drop Zones ─────────────────────────────────── */
 
 function WonLostDropZone({
-  id, label, icon: Icon, color,
+  id,
+  label,
+  icon: Icon,
+  color,
 }: {
   id: string;
   label: string;
@@ -212,7 +256,7 @@ function WonLostDropZone({
   return (
     <div
       ref={setNodeRef}
-      className={`flex w-16 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-dashed transition-all ${isOver ? "border-primary bg-primary/10 scale-105" : "border-border bg-muted/10"}`}
+      className={`flex w-16 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-dashed transition-all ${isOver ? 'border-primary bg-primary/10 scale-105' : 'border-border bg-muted/10'}`}
     >
       <Icon className={`h-5 w-5 ${color}`} />
       <span className={`mt-1 text-[10px] font-medium ${color}`}>{label}</span>
@@ -235,12 +279,22 @@ interface DealsKanbanProps {
 }
 
 export function DealsKanban({
-  deals, wonDeals, lostDeals, stages, onDragEnd, onDealClick, onAddDeal, onMarkWon, onMarkLost,
+  deals,
+  wonDeals,
+  lostDeals,
+  stages,
+  onDragEnd,
+  onDealClick,
+  onAddDeal,
+  onMarkWon,
+  onMarkLost,
 }: DealsKanbanProps) {
   const [activeDeal, setActiveDeal] = useState<DealWithRelations | null>(null);
 
   const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 8 } });
-  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } });
+  const touchSensor = useSensor(TouchSensor, {
+    activationConstraint: { delay: 250, tolerance: 5 },
+  });
   const keyboardSensor = useSensor(KeyboardSensor);
   const sensors = useSensors(pointerSensor, touchSensor, keyboardSensor);
 
@@ -254,8 +308,8 @@ export function DealsKanban({
     if (!over) return;
     const dealId = active.id as string;
     const overId = over.id as string;
-    if (overId === "won-drop") onMarkWon(dealId);
-    else if (overId === "lost-drop") onMarkLost(dealId);
+    if (overId === 'won-drop') onMarkWon(dealId);
+    else if (overId === 'lost-drop') onMarkLost(dealId);
     else if (dealId !== overId) onDragEnd(dealId, overId);
   };
 
@@ -263,8 +317,10 @@ export function DealsKanban({
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed border-border py-20">
         <div className="text-center">
-          <p className="text-muted-foreground">Nenhum pipeline configurado</p>
-          <p className="text-sm text-muted-foreground">Vá em Configurações → Pipelines para criar</p>
+          <p className="text-muted-foreground">Nenhum dado encontrado</p>
+          <p className="text-sm text-muted-foreground">
+            Clique no botão acima pra criar o primeiro negócio
+          </p>
         </div>
       </div>
     );
@@ -272,7 +328,12 @@ export function DealsKanban({
 
   return (
     <div className="space-y-3">
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
         <div className="flex gap-4 overflow-x-auto pb-4">
           {stages.map((stage) => (
             <StageColumn
@@ -295,7 +356,7 @@ export function DealsKanban({
               <div className="rounded-md border border-primary bg-card p-2.5 shadow-lg">
                 <p className="text-[13px] font-medium">{activeDeal.title}</p>
                 <p className="text-xs font-semibold text-foreground mt-0.5">
-                  {formatCurrency(Number(activeDeal.value) || 0, activeDeal.currency || "BRL")}
+                  {formatCurrency(Number(activeDeal.value) || 0, activeDeal.currency || 'BRL')}
                 </p>
               </div>
             </div>
@@ -305,8 +366,20 @@ export function DealsKanban({
 
       {(wonDeals.length > 0 || lostDeals.length > 0) && (
         <div className="space-y-2">
-          <CollapsibleStatusColumn title="Ganhos" icon={Trophy} deals={wonDeals} color="text-success" onDealClick={onDealClick} />
-          <CollapsibleStatusColumn title="Perdidos" icon={XCircle} deals={lostDeals} color="text-destructive" onDealClick={onDealClick} />
+          <CollapsibleStatusColumn
+            title="Ganhos"
+            icon={Trophy}
+            deals={wonDeals}
+            color="text-success"
+            onDealClick={onDealClick}
+          />
+          <CollapsibleStatusColumn
+            title="Perdidos"
+            icon={XCircle}
+            deals={lostDeals}
+            color="text-destructive"
+            onDealClick={onDealClick}
+          />
         </div>
       )}
     </div>
