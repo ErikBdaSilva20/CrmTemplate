@@ -53,8 +53,9 @@ import { useContacts } from '@/hooks/useContacts';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useActivities } from '@/hooks/useActivities';
 import { CONTACT_STATUS, CONTACT_STATUSES } from '@/lib/domain';
-import { updateContact, deleteContact, type ContactStatus } from '@/lib/data';
+import { updateContact, deleteContact, type Contact, type ContactStatus } from '@/lib/data';
 import { formatDate } from '@/lib/format';
+import { exportToCsv, type CsvColumn } from '@/lib/csv';
 
 type SortKey = 'name' | 'email' | 'status' | 'created_at' | 'title';
 type SortDir = 'asc' | 'desc';
@@ -218,32 +219,16 @@ export default function ContactsScreen() {
   };
 
   const exportCSV = () => {
-    const rows = sorted.map((c) => {
-      const comp = companies.find((co) => co.id === c.company_id);
-      return {
-        Nome: c.first_name,
-        Sobrenome: c.last_name || '',
-        Email: c.email || '',
-        Telefone: c.phone || '',
-        Cargo: c.title || '',
-        Empresa: comp?.name || '',
-        Status: c.status || '',
-      };
-    });
-    const headers = Object.keys(rows[0] || {});
-    const csv = [
-      headers.join(','),
-      ...rows.map((r) =>
-        headers.map((h) => `"${(r as Record<string, unknown>)[h] || ''}"`).join(',')
-      ),
-    ].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'contatos.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    const columns: CsvColumn<Contact>[] = [
+      { label: 'Nome', accessor: (c) => c.first_name },
+      { label: 'Sobrenome', accessor: (c) => c.last_name },
+      { label: 'Email', accessor: (c) => c.email },
+      { label: 'Telefone', accessor: (c) => c.phone },
+      { label: 'Cargo', accessor: (c) => c.title },
+      { label: 'Empresa', accessor: (c) => companies.find((co) => co.id === c.company_id)?.name },
+      { label: 'Status', accessor: (c) => c.status },
+    ];
+    exportToCsv(sorted, columns, 'contatos.csv');
     toast.success('CSV exportado');
   };
 

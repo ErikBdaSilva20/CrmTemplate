@@ -15,6 +15,7 @@ import {
   createContact, createCompany,
   type ContactInsert, type CompanyInsert,
 } from "@/lib/data";
+import { parseCsv } from "@/lib/csv";
 
 interface CSVImportModalProps {
   open: boolean;
@@ -62,10 +63,10 @@ export function CSVImportModal({ open, onOpenChange, onImported, entityType }: C
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
-      const lines = text.split("\n").map((l) => l.split(",").map((c) => c.trim().replace(/^"|"$/g, "")));
+      const lines = parseCsv(text);
       if (lines.length < 2) { toast.error("CSV vazio ou inválido"); return; }
       setCsvHeaders(lines[0]);
-      setCsvRows(lines.slice(1).filter((r) => r.some((c) => c)));
+      setCsvRows(lines.slice(1));
       // Auto-map by header name
       const autoMap: Record<number, string> = {};
       lines[0].forEach((header, i) => {

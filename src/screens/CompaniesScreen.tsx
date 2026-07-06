@@ -21,8 +21,18 @@ import { CompanyLogo } from "@/components/crm/CompanyLogo";
 import { CSVImportModal } from "@/components/crm/CSVImportModal";
 import { COMPANY_SIZES } from "@/lib/constants";
 import { useCompanies } from "@/hooks/useCompanies";
-import { deleteCompany } from "@/lib/data";
+import { deleteCompany, type Company } from "@/lib/data";
 import { formatCurrencyCompact, formatDate } from "@/lib/format";
+import { exportToCsv, type CsvColumn } from "@/lib/csv";
+
+const EXPORT_COLUMNS: CsvColumn<Company>[] = [
+  { label: "Nome", accessor: (c) => c.name },
+  { label: "Domínio", accessor: (c) => c.domain },
+  { label: "Indústria", accessor: (c) => c.industry },
+  { label: "Tamanho", accessor: (c) => c.size },
+  { label: "Receita", accessor: (c) => c.revenue },
+  { label: "Website", accessor: (c) => c.website },
+];
 
 type SortKey = "name" | "domain" | "industry" | "size" | "revenue" | "created_at";
 type SortDir = "asc" | "desc";
@@ -125,16 +135,7 @@ export default function CompaniesScreen() {
   };
 
   const exportCSV = () => {
-    const rows = sorted.map((c) => ({
-      Nome: c.name, "Domínio": c.domain || "", "Indústria": c.industry || "",
-      Tamanho: c.size || "", Receita: c.revenue || "", Website: c.website || "",
-    }));
-    const headers = Object.keys(rows[0] || {});
-    const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => `"${(r as Record<string, unknown>)[h] || ""}"`).join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "empresas.csv"; a.click();
-    URL.revokeObjectURL(url);
+    exportToCsv(sorted, EXPORT_COLUMNS, "empresas.csv");
     toast.success("CSV exportado");
   };
 
@@ -165,11 +166,11 @@ export default function CompaniesScreen() {
           <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} aria-label="Alternar filtros">
             <Filter className="mr-1 h-3.5 w-3.5" /><span className="hidden sm:inline">Filtros</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setCsvOpen(true)} aria-label="Importar CSV" className="hidden sm:flex">
-            <Upload className="mr-1.5 h-3.5 w-3.5" />Importar
+          <Button variant="outline" size="sm" onClick={() => setCsvOpen(true)} aria-label="Importar CSV">
+            <Upload className="sm:mr-1.5 h-3.5 w-3.5" /><span className="hidden sm:inline">Importar</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={exportCSV} aria-label="Exportar CSV" className="hidden sm:flex">
-            <Download className="mr-1.5 h-3.5 w-3.5" />Exportar
+          <Button variant="outline" size="sm" onClick={exportCSV} aria-label="Exportar CSV">
+            <Download className="sm:mr-1.5 h-3.5 w-3.5" /><span className="hidden sm:inline">Exportar</span>
           </Button>
           <Button onClick={() => setCreateOpen(true)} aria-label="Criar nova empresa">
             <Plus className="mr-1 sm:mr-2 h-4 w-4" /><span className="hidden sm:inline">Nova Empresa</span><span className="sm:hidden">Nova</span>
