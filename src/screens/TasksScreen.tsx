@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,15 +18,24 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Plus, Clock, AlertTriangle, Trash2, Edit2, MoreHorizontal,
+  Plus, Clock, AlertTriangle, Trash2, Edit2, MoreHorizontal, Kanban, List,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useActivities } from "@/hooks/useActivities";
 import { useContacts } from "@/hooks/useContacts";
 import { useDeals } from "@/hooks/useDeals";
-import { createActivity, updateActivity, deleteActivity, toggleTaskDone, type Activity } from "@/lib/data";
+import { useCompanies } from "@/hooks/useCompanies";
+import { useAuth } from "@/lib/auth";
+import { TasksKanban } from "@/components/crm/TasksKanban";
+import {
+  createActivity, updateActivity, deleteActivity, toggleTaskDone,
+  type Activity, type ActivityUpdate,
+} from "@/lib/data";
 import { startOfDay, endOfDay, getWeekRange } from "@/lib/date";
+import { dueDateForBucket, type TaskBucket } from "@/lib/tasks";
 import { formatDateShort } from "@/lib/format";
+
+type ViewMode = "list" | "kanban";
 
 type DateFilter = "todo" | "overdue" | "today" | "tomorrow" | "this_week" | "done";
 
@@ -40,9 +49,20 @@ const dateFilterLabels: Record<DateFilter, string> = {
 };
 
 export default function TasksScreen() {
-  const { data: activities, refresh: refreshActivities } = useActivities();
+  const { data: activitiesRaw, refresh: refreshActivities } = useActivities();
   const { data: contacts } = useContacts();
   const { data: deals } = useDeals();
+  const { data: companies } = useCompanies();
+  const { user } = useAuth();
+  const ownerName = user?.name || "Usuário";
+
+  // Espelha a cache compartilhada num state local pra permitir atualização
+  // otimista no drag do Kanban (mesmo padrão de ContactsScreen/DealsScreen) —
+  // sem isso, o card só pula de coluna depois do round-trip completo.
+  const [activities, setActivities] = useState(activitiesRaw);
+  useEffect(() => {
+    setActivities(activitiesRaw);
+  }, [activitiesRaw]);
 
   // Tarefas = activities com type="task" (activities.repo.ts) — mesma cache
   // de ActivitiesScreen, só filtrada no front.
@@ -51,6 +71,7 @@ export default function TasksScreen() {
     [activities],
   );
 
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [dateFilter, setDateFilter] = useState<DateFilter>("todo");
   const [createOpen, setCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState<Activity | null>(null);
@@ -65,6 +86,26 @@ export default function TasksScreen() {
   const toggleComplete = async (task: Activity) => {
     await toggleTaskDone(task.id, !task.completed_at);
     refreshActivities();
+  };
+
+  // Move uma tarefa entre buckets do Kanban: "Concluídas" marca completed_at;
+  // qualquer outra coluna ajusta due_date e reabre a tarefa (completed_at:
+  // null), o que também cobre o caso de arrastar de volta de "Concluídas".
+  const handleKanbanDragEnd = async (taskId: string, targetBucket: TaskBucket) => {
+    const patch: ActivityUpdate =
+      targetBucket === "done"
+        ? { completed_at: new Date().toISOString() }
+        : { due_date: dueDateForBucket(targetBucket), completed_at: null };
+
+    const previous = activities;
+    setActivities((prev) => prev.map((a) => (a.id === taskId ? { ...a, ...patch } : a)));
+    try {
+      await updateActivity(taskId, patch);
+      refreshActivities();
+    } catch (e) {
+      setActivities(previous);
+      toast.error(e instanceof Error ? e.message : "Erro ao mover tarefa");
+    }
   };
 
   const removeTask = async (id: string) => {
@@ -184,11 +225,45 @@ export default function TasksScreen() {
             {counts.overdue > 0 && <span className="text-destructive font-medium ml-1">· {counts.overdue} vencidas</span>}
           </p>
         </div>
-        <Button onClick={openCreate} size="sm">
-          <Plus className="mr-1.5 h-3.5 w-3.5" />Tarefa
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
+            <button
+              onClick={() => setViewMode("kanban")}
+              aria-label="Visualização Kanban"
+              className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "kanban" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <Kanban className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Kanban</span>
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              aria-label="Visualização lista"
+              className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <List className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Lista</span>
+            </button>
+          </div>
+          <Button onClick={openCreate} size="sm">
+            <Plus className="mr-1.5 h-3.5 w-3.5" />Tarefa
+          </Button>
+        </div>
       </div>
 
+      {viewMode === "kanban" && (
+        <TasksKanban
+          tasks={tasks}
+          contacts={contacts}
+          deals={deals}
+          companies={companies}
+          ownerName={ownerName}
+          onTaskClick={openEdit}
+          onDragEnd={handleKanbanDragEnd}
+        />
+      )}
+
+      {viewMode === "list" && (
+        <>
       {/* Date filter tabs */}
       <div className="flex items-center gap-0.5 py-2 text-xs flex-wrap">
         {(Object.keys(dateFilterLabels) as DateFilter[]).map((key) => {
@@ -309,6 +384,8 @@ export default function TasksScreen() {
           </TableBody>
         </Table>
       </div>
+        </>
+      )}
 
       {/* Create/Edit dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
