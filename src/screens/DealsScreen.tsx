@@ -2,22 +2,16 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Kanban, KanbanSquare, List, Plus, Filter, Settings2, XCircle, Trophy, RotateCcw, X,
-} from "lucide-react";
+import { KanbanSquare, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { DealsKanban } from "@/components/crm/DealsKanban";
 import { DealsList } from "@/components/crm/DealsList";
 import { DealsFilters, type DealFilters } from "@/components/crm/DealsFilters";
 import { PipelineEditor } from "@/components/crm/PipelineEditor";
-import { MonthYearSelect } from "@/components/crm/MonthYearSelect";
+import { DealsToolbar, type DealsViewMode } from "@/components/crm/deals/DealsToolbar";
+import { DealFormSheet } from "@/components/crm/deals/DealFormSheet";
+import { LossReasonModal } from "@/components/crm/deals/LossReasonModal";
+import { LossReasonsPanel } from "@/components/crm/deals/LossReasonsPanel";
 import { useAuth, roleAtLeast } from "@/lib/auth";
 import { useDeals } from "@/hooks/useDeals";
 import { useStages, usePipelines, invalidatePipelines, invalidateStages } from "@/hooks/usePipelines";
@@ -25,19 +19,20 @@ import { useContacts } from "@/hooks/useContacts";
 import { useCompanies } from "@/hooks/useCompanies";
 import { useLossReasons, invalidateLossReasons } from "@/hooks/useLossReasons";
 import { useActivities } from "@/hooks/useActivities";
-import { formatCurrency } from "@/lib/format";
 import {
   createDeal, updateDeal, deleteDeal, moveDealToStage, markDealWon, markDealLost,
   createDefaultPipeline, createLossReason, deleteLossReason, enrichDeals, type Deal,
 } from "@/lib/data";
-
-type ViewMode = "kanban" | "list";
 
 function currentMonthCloseDate(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
+// Orquestrador de layout: busca os dados, mantém o estado dos painéis
+// (sheet de negócio, modal/sheet de motivos de perda, filtros) e delega a
+// renderização visual para components/crm/deals/** e components/crm/**
+// (Masia Clone-Template Audit Framework §4/§6.1).
 export default function DealsScreen() {
   const { role } = useAuth();
   const canManage = roleAtLeast(role, "manager"); // pipeline é lookup (admin/manager)
@@ -68,7 +63,7 @@ export default function DealsScreen() {
     });
   }, [pipelines]);
 
-  const [viewMode, setViewMode] = useState<ViewMode>("kanban");
+  const [viewMode, setViewMode] = useState<DealsViewMode>("kanban");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState<Deal | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -149,8 +144,8 @@ export default function DealsScreen() {
   );
 
   const filteredDeals = deals.filter((d) => {
-    if (filters.minValue && (Number(d.value) || 0) < filters.minValue) return false;
-    if (filters.maxValue && (Number(d.value) || 0) > filters.maxValue) return false;
+    if (filters.minValue && d.value < filters.minValue) return false;
+    if (filters.maxValue && d.value > filters.maxValue) return false;
     if (filters.closeDateFrom && d.close_date && d.close_date < filters.closeDateFrom) return false;
     if (filters.closeDateTo && d.close_date && d.close_date > filters.closeDateTo) return false;
     if (viewMode === "kanban") {
@@ -262,58 +257,18 @@ export default function DealsScreen() {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg sm:text-xl font-bold tracking-tight">Negócios</h1>
-
-          <div className="flex rounded-md border border-border bg-muted/50 p-0.5">
-            {[
-              { mode: "kanban" as const, icon: Kanban, label: "Kanban" },
-              { mode: "list" as const, icon: List, label: "Lista" },
-            ].map(({ mode, icon: Icon, label }) => (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                aria-label={`Visualização ${label}`}
-                className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
-                  viewMode === mode ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" /><span className="hidden sm:inline">{label}</span>
-              </button>
-            ))}
-          </div>
-
-          <Button onClick={() => openNew()} size="sm" className="gap-1">
-            <Plus className="h-3.5 w-3.5" /><span className="hidden sm:inline">Negócio</span>
-          </Button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">
-            {filteredDeals.length} {filteredDeals.length === 1 ? "negócio" : "negócios"}
-          </span>
-
-          {pipelines.length > 0 && (
-            <Select value={selectedPipeline} onValueChange={setSelectedPipeline}>
-              <SelectTrigger className="h-8 w-40 text-xs border-border"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {pipelines.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          )}
-
-          {canManage && (
-            <Button variant="outline" size="icon" className="h-8 w-8" disabled={!selectedPipeline} onClick={() => setPipelineDialogOpen(true)} aria-label="Personalizar pipeline">
-              <Settings2 className="h-3.5 w-3.5" />
-            </Button>
-          )}
-
-          <Button variant="outline" size="sm" className="h-8" onClick={() => setShowFilters(!showFilters)} aria-label="Alternar filtros">
-            <Filter className="mr-1 h-3 w-3" /><span className="hidden sm:inline">Filtro</span>
-          </Button>
-        </div>
-      </div>
+      <DealsToolbar
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        onNewDeal={() => openNew()}
+        filteredCount={filteredDeals.length}
+        pipelines={pipelines}
+        selectedPipeline={selectedPipeline}
+        onPipelineChange={setSelectedPipeline}
+        canManage={canManage}
+        onOpenPipelineEditor={() => setPipelineDialogOpen(true)}
+        onToggleFilters={() => setShowFilters(!showFilters)}
+      />
 
       <Button
         variant="outline"
@@ -377,219 +332,42 @@ export default function DealsScreen() {
         </>
       )}
 
-      {/* Create/Edit Sheet — sem "Responsável" (owner_id é do gateway) */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full overflow-y-auto sm:w-[480px] sm:max-w-[480px]">
-          <SheetHeader>
-            <SheetTitle>{editing ? "Editar Negócio" : "Novo Negócio"}</SheetTitle>
-            <SheetDescription>{editing ? "Atualize os dados do negócio" : "Preencha os dados do novo negócio"}</SheetDescription>
-          </SheetHeader>
-          <div className="mt-6 space-y-4">
-            <div className="space-y-2">
-              <Label>Título</Label>
-              <Input value={form.title || ""} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Nome do negócio" />
-            </div>
-            <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
-              <p><strong className="text-foreground">Valor</strong>: quanto esse negócio representa em receita.</p>
-              <p><strong className="text-foreground">Probabilidade</strong>: chance estimada (%) de fechar, usada para priorizar o funil.</p>
-              <p><strong className="text-foreground">Fechamento</strong>: mês/ano em que esse negócio deve fechar (fechamento recorrente).</p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Valor</Label>
-                <Input type="number" value={form.value ?? ""} onChange={(e) => setForm({ ...form, value: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Moeda</Label>
-                <Select value={form.currency || "BRL"} onValueChange={(v) => setForm({ ...form, currency: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BRL">BRL (R$)</SelectItem>
-                    <SelectItem value="USD">USD ($)</SelectItem>
-                    <SelectItem value="EUR">EUR (€)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Estágio</Label>
-              <Select value={form.stage_id || ""} onValueChange={(v) => setForm({ ...form, stage_id: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {pipelineStages.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Contato</Label>
-              <Select value={form.contact_id || "none"} onValueChange={(v) => setForm({ ...form, contact_id: v === "none" ? null : v })}>
-                <SelectTrigger><SelectValue placeholder="Selecionar contato" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhum</SelectItem>
-                  {contacts.map((c) => <SelectItem key={c.id} value={c.id}>{c.first_name} {c.last_name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Empresa</Label>
-              <Select value={form.company_id || "none"} onValueChange={(v) => setForm({ ...form, company_id: v === "none" ? null : v })}>
-                <SelectTrigger><SelectValue placeholder="Selecionar empresa" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhuma</SelectItem>
-                  {companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Probabilidade (%)</Label>
-                <Input type="number" min={0} max={100} value={form.probability ?? ""} onChange={(e) => setForm({ ...form, probability: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Fechamento</Label>
-                <MonthYearSelect value={form.close_date} onChange={(v) => setForm({ ...form, close_date: v })} />
-              </div>
-            </div>
-            <Button onClick={handleSave} className="w-full">{editing ? "Salvar" : "Criar Negócio"}</Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+      <DealFormSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        editing={editing}
+        form={form}
+        onFormChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+        pipelineStages={pipelineStages}
+        contacts={contacts}
+        companies={companies}
+        onSave={handleSave}
+      />
 
-      {/* Loss Reason Modal — motivos vêm de listLossReasons(), não mais lista fixa (§4.1) */}
-      <Dialog open={lossModalOpen} onOpenChange={setLossModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Motivo da Perda</DialogTitle>
-            <DialogDescription>Por que este negócio foi perdido?</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Motivo</Label>
-              <Select value={lossReason} onValueChange={setLossReason}>
-                <SelectTrigger><SelectValue placeholder="Selecionar motivo" /></SelectTrigger>
-                <SelectContent>
-                  {lossReasons.filter((lr) => lr.is_active).map((lr) => (
-                    <SelectItem key={lr.id} value={lr.label}>{lr.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Observação (opcional)</Label>
-              <Textarea value={lossNote} onChange={(e) => setLossNote(e.target.value)} placeholder="Detalhes adicionais..." rows={3} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setLossModalOpen(false)}>Cancelar</Button>
-            <Button variant="destructive" onClick={confirmLoss} disabled={!lossReason}>Confirmar Perda</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <LossReasonModal
+        open={lossModalOpen}
+        onOpenChange={setLossModalOpen}
+        lossReasons={lossReasons}
+        lossReason={lossReason}
+        onLossReasonChange={setLossReason}
+        lossNote={lossNote}
+        onLossNoteChange={setLossNote}
+        onConfirm={confirmLoss}
+      />
 
-      {/* Motivos de Perda — gestão de razões + revisão de negócios perdidos.
-          Recuperado da antiga SettingsScreen (removida no Épico 08); vive
-          aqui em /deals em vez de uma tela própria. */}
-      <Sheet open={lossReasonsSheetOpen} onOpenChange={setLossReasonsSheetOpen}>
-        <SheetContent className="w-full overflow-y-auto sm:w-[560px] sm:max-w-[560px]">
-          <SheetHeader>
-            <SheetTitle>Motivos de Perda</SheetTitle>
-            <SheetDescription>Gerencie os motivos e revise negócios marcados como perdidos.</SheetDescription>
-          </SheetHeader>
-
-          <div className="mt-6 space-y-6">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Razões de Perda</CardTitle>
-                <CardDescription className="text-[10px]">
-                  Motivos disponíveis ao marcar um negócio como perdido
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {canManage && (
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Ex: Preço alto"
-                      value={newLossReasonLabel}
-                      onChange={(e) => setNewLossReasonLabel(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addLossReason()}
-                      className="h-8 text-xs flex-1"
-                    />
-                    <Button size="sm" className="h-8" onClick={addLossReason}>
-                      <Plus className="h-3 w-3" />
-                    </Button>
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-1.5">
-                  {lossReasons.map((lr) => (
-                    <Badge key={lr.id} variant="secondary" className="text-[10px] gap-1">
-                      {lr.label}
-                      {canManage && (
-                        <button
-                          onClick={() => removeLossReason(lr.id)}
-                          className="hover:text-destructive"
-                          aria-label={`Remover ${lr.label}`}
-                        >
-                          <X className="h-2.5 w-2.5" />
-                        </button>
-                      )}
-                    </Badge>
-                  ))}
-                  {lossReasons.length === 0 && (
-                    <p className="py-2 text-xs text-muted-foreground">Nenhum motivo cadastrado</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold">Negócios Perdidos ({allLostDeals.length})</h3>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {allLostDeals.map((deal) => (
-                  <Card key={deal.id} className="border-destructive/20 transition-shadow hover:shadow-md">
-                    <CardContent className="space-y-2 p-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{deal.title}</p>
-                        {deal.company && (
-                          <p className="truncate text-xs text-muted-foreground">{deal.company.name}</p>
-                        )}
-                      </div>
-                      <p className="text-sm font-semibold text-destructive">
-                        {formatCurrency(Number(deal.value) || 0, deal.currency || "BRL")}
-                      </p>
-                      {deal.loss_reason && (
-                        <p className="truncate text-xs text-muted-foreground">Motivo: {deal.loss_reason}</p>
-                      )}
-                      <div className="flex gap-1.5 pt-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 flex-1 border-success/30 text-[11px] text-success hover:bg-success/10"
-                          onClick={() => onMarkWon(deal.id)}
-                        >
-                          <Trophy className="mr-1 h-3 w-3" />Ganho
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 flex-1 text-[11px]"
-                          onClick={() => reopenLostDeal(deal.id)}
-                        >
-                          <RotateCcw className="mr-1 h-3 w-3" />Reabrir
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                {allLostDeals.length === 0 && (
-                  <p className="col-span-full py-6 text-center text-xs text-muted-foreground">
-                    Nenhum negócio perdido no momento
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+      <LossReasonsPanel
+        open={lossReasonsSheetOpen}
+        onOpenChange={setLossReasonsSheetOpen}
+        lossReasons={lossReasons}
+        canManage={canManage}
+        newLossReasonLabel={newLossReasonLabel}
+        onNewLossReasonLabelChange={setNewLossReasonLabel}
+        onAddLossReason={addLossReason}
+        onRemoveLossReason={removeLossReason}
+        allLostDeals={allLostDeals}
+        onMarkWon={onMarkWon}
+        onReopen={reopenLostDeal}
+      />
 
       {/* Pipeline Customization Dialog (admin/manager) — componente compartilhado com Configurações (§3.2) */}
       <PipelineEditor
