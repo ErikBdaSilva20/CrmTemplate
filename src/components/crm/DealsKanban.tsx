@@ -184,7 +184,7 @@ function StageColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex w-[220px] sm:w-[240px] shrink-0 flex-col transition-colors ${isOver ? 'bg-primary/5' : ''}`}
+      className={`flex flex-1 min-w-[220px] sm:min-w-[240px] flex-col transition-colors ${isOver ? 'bg-primary/5' : ''}`}
     >
       <div className="mb-1 px-1">
         <h3 className="text-[13px] font-bold text-foreground leading-tight">{stage.name}</h3>
@@ -391,7 +391,7 @@ export function DealsKanban({
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div className="flex min-w-[70vw] gap-4 overflow-x-auto pb-4">
           {stages.map((stage) => (
             <StageColumn
               key={stage.id}

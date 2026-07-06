@@ -7,7 +7,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Kanban, KanbanSquare, List, Plus, Filter, Settings2 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Kanban, KanbanSquare, List, Plus, Filter, Settings2, XCircle, Trophy, RotateCcw, X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { DealsKanban } from "@/components/crm/DealsKanban";
 import { DealsList } from "@/components/crm/DealsList";
@@ -19,11 +23,12 @@ import { useDeals } from "@/hooks/useDeals";
 import { useStages, usePipelines, invalidatePipelines, invalidateStages } from "@/hooks/usePipelines";
 import { useContacts } from "@/hooks/useContacts";
 import { useCompanies } from "@/hooks/useCompanies";
-import { useLossReasons } from "@/hooks/useLossReasons";
+import { useLossReasons, invalidateLossReasons } from "@/hooks/useLossReasons";
 import { useActivities } from "@/hooks/useActivities";
+import { formatCurrency } from "@/lib/format";
 import {
   createDeal, updateDeal, deleteDeal, moveDealToStage, markDealWon, markDealLost,
-  createDefaultPipeline, enrichDeals, type Deal,
+  createDefaultPipeline, createLossReason, deleteLossReason, enrichDeals, type Deal,
 } from "@/lib/data";
 
 type ViewMode = "kanban" | "list";
@@ -43,7 +48,7 @@ export default function DealsScreen() {
   const { data: pipelines } = usePipelines();
   const { data: contacts } = useContacts();
   const { data: companies } = useCompanies();
-  const { data: lossReasons } = useLossReasons();
+  const { data: lossReasons, refresh: refreshLossReasons } = useLossReasons();
   const { data: activities } = useActivities();
 
   // Cache compartilhada (useDeals) + cruzamento local no front (enrichDeals),
@@ -99,6 +104,42 @@ export default function DealsScreen() {
       toast.error(e instanceof Error ? e.message : "Erro ao criar pipeline");
     } finally {
       setCreatingFirstPipeline(false);
+    }
+  };
+
+  // Motivos de Perda (recuperado da antiga SettingsScreen, removida no Épico
+  // 08 — a gestão volta a existir aqui em /deals, junto da lista de negócios
+  // perdidos, em vez de uma tela própria) + revisão de negócios "lost" com
+  // possibilidade de reverter o status.
+  const [lossReasonsSheetOpen, setLossReasonsSheetOpen] = useState(false);
+  const [newLossReasonLabel, setNewLossReasonLabel] = useState("");
+
+  const addLossReason = async () => {
+    if (!newLossReasonLabel.trim()) return;
+    try {
+      await createLossReason({ label: newLossReasonLabel.trim() });
+      setNewLossReasonLabel("");
+      invalidateLossReasons();
+      refreshLossReasons();
+      toast.success("Motivo de perda criado");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao criar motivo");
+    }
+  };
+
+  const removeLossReason = async (id: string) => {
+    await deleteLossReason(id);
+    invalidateLossReasons();
+    refreshLossReasons();
+  };
+
+  const reopenLostDeal = async (dealId: string) => {
+    try {
+      await updateDeal(dealId, { status: "open" });
+      refreshDeals();
+      toast.success("Negócio reaberto");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao reabrir negócio");
     }
   };
 
@@ -166,9 +207,13 @@ export default function DealsScreen() {
   };
 
   const onMarkWon = async (dealId: string) => {
-    await markDealWon(dealId);
-    refreshDeals();
-    toast.success("Negócio marcado como ganho! 🎉");
+    try {
+      await markDealWon(dealId);
+      refreshDeals();
+      toast.success("Negócio marcado como ganho! 🎉");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao marcar como ganho");
+    }
   };
 
   const openLossModal = (dealId: string) => {
@@ -180,11 +225,15 @@ export default function DealsScreen() {
 
   const confirmLoss = async () => {
     if (!lossDealId) return;
-    const reason = lossNote ? `${lossReason}: ${lossNote}` : lossReason;
-    await markDealLost(lossDealId, reason);
-    setLossModalOpen(false);
-    refreshDeals();
-    toast.success("Negócio marcado como perdido");
+    try {
+      const reason = lossNote ? `${lossReason}: ${lossNote}` : lossReason;
+      await markDealLost(lossDealId, reason);
+      setLossModalOpen(false);
+      refreshDeals();
+      toast.success("Negócio marcado como perdido");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao marcar como perdido");
+    }
   };
 
   const handleBatchAction = async (action: "won" | "lost" | "delete") => {
@@ -206,6 +255,10 @@ export default function DealsScreen() {
   const openDeals = filteredDeals.filter((d) => d.status === "open");
   const wonDeals = filteredDeals.filter((d) => d.status === "won");
   const lostDeals = filteredDeals.filter((d) => d.status === "lost");
+  // Todos os perdidos (não só os do filtro/pipeline ativo) — a área de
+  // Motivos de Perda é um painel de revisão geral, independente dos filtros
+  // do Kanban/Lista.
+  const allLostDeals = deals.filter((d) => d.status === "lost");
 
   return (
     <div className="space-y-3">
@@ -261,6 +314,16 @@ export default function DealsScreen() {
           </Button>
         </div>
       </div>
+
+      <Button
+        variant="outline"
+        size="lg"
+        onClick={() => setLossReasonsSheetOpen(true)}
+        className="w-full justify-center gap-2 border-dashed border-destructive/40 text-destructive hover:bg-destructive/5 hover:text-destructive"
+      >
+        <XCircle className="h-5 w-5" />
+        Motivos de Perda{allLostDeals.length > 0 ? ` · ${allLostDeals.length} negócios perdidos` : ""}
+      </Button>
 
       {showFilters && <DealsFilters filters={filters} onFiltersChange={setFilters} />}
 
@@ -422,6 +485,111 @@ export default function DealsScreen() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Motivos de Perda — gestão de razões + revisão de negócios perdidos.
+          Recuperado da antiga SettingsScreen (removida no Épico 08); vive
+          aqui em /deals em vez de uma tela própria. */}
+      <Sheet open={lossReasonsSheetOpen} onOpenChange={setLossReasonsSheetOpen}>
+        <SheetContent className="w-full overflow-y-auto sm:w-[560px] sm:max-w-[560px]">
+          <SheetHeader>
+            <SheetTitle>Motivos de Perda</SheetTitle>
+            <SheetDescription>Gerencie os motivos e revise negócios marcados como perdidos.</SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-6">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Razões de Perda</CardTitle>
+                <CardDescription className="text-[10px]">
+                  Motivos disponíveis ao marcar um negócio como perdido
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {canManage && (
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Ex: Preço alto"
+                      value={newLossReasonLabel}
+                      onChange={(e) => setNewLossReasonLabel(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addLossReason()}
+                      className="h-8 text-xs flex-1"
+                    />
+                    <Button size="sm" className="h-8" onClick={addLossReason}>
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-1.5">
+                  {lossReasons.map((lr) => (
+                    <Badge key={lr.id} variant="secondary" className="text-[10px] gap-1">
+                      {lr.label}
+                      {canManage && (
+                        <button
+                          onClick={() => removeLossReason(lr.id)}
+                          className="hover:text-destructive"
+                          aria-label={`Remover ${lr.label}`}
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      )}
+                    </Badge>
+                  ))}
+                  {lossReasons.length === 0 && (
+                    <p className="py-2 text-xs text-muted-foreground">Nenhum motivo cadastrado</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold">Negócios Perdidos ({allLostDeals.length})</h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {allLostDeals.map((deal) => (
+                  <Card key={deal.id} className="border-destructive/20 transition-shadow hover:shadow-md">
+                    <CardContent className="space-y-2 p-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{deal.title}</p>
+                        {deal.company && (
+                          <p className="truncate text-xs text-muted-foreground">{deal.company.name}</p>
+                        )}
+                      </div>
+                      <p className="text-sm font-semibold text-destructive">
+                        {formatCurrency(Number(deal.value) || 0, deal.currency || "BRL")}
+                      </p>
+                      {deal.loss_reason && (
+                        <p className="truncate text-xs text-muted-foreground">Motivo: {deal.loss_reason}</p>
+                      )}
+                      <div className="flex gap-1.5 pt-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 flex-1 border-success/30 text-[11px] text-success hover:bg-success/10"
+                          onClick={() => onMarkWon(deal.id)}
+                        >
+                          <Trophy className="mr-1 h-3 w-3" />Ganho
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 flex-1 text-[11px]"
+                          onClick={() => reopenLostDeal(deal.id)}
+                        >
+                          <RotateCcw className="mr-1 h-3 w-3" />Reabrir
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                {allLostDeals.length === 0 && (
+                  <p className="col-span-full py-6 text-center text-xs text-muted-foreground">
+                    Nenhum negócio perdido no momento
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Pipeline Customization Dialog (admin/manager) — componente compartilhado com Configurações (§3.2) */}
       <PipelineEditor
