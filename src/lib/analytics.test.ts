@@ -2,9 +2,27 @@ import { describe, it, expect } from "vitest";
 import {
   computePercentage, getPeriodStart, computeFunnel, computeAtRiskDeals,
   computeMonthlyRevenue, computePreviousPeriodRevenue, computeAverageSalesCycleDays,
-  computeStageDeals, selectTopDeals,
+  computeStageDeals, selectTopDeals, dealPriority,
 } from "./analytics";
-import type { Deal, PipelineStage } from "./data";
+import type { Activity, Deal, PipelineStage } from "./data";
+
+function makeActivity(overrides: Partial<Activity>): Activity {
+  return {
+    id: "act-1",
+    owner_id: "owner-1",
+    type: "note",
+    title: "Activity",
+    body: null,
+    contact_id: null,
+    deal_id: null,
+    company_id: null,
+    due_date: null,
+    completed_at: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    ...overrides,
+  };
+}
 
 function makeDeal(overrides: Partial<Deal>): Deal {
   return {
@@ -131,6 +149,61 @@ describe("selectTopDeals", () => {
       makeDeal({ id: "has-date", qualification_score: 50, value: 100, close_date: "2026-01-01" }),
     ];
     expect(selectTopDeals(deals).map((d) => d.id)).toEqual(["has-date", "no-date"]);
+  });
+});
+
+describe("dealPriority", () => {
+  const now = new Date(2026, 5, 20);
+
+  it("flags a deal closing this month or overdue as urgent", () => {
+    const deal = makeDeal({ close_date: new Date(2026, 5, 1).toISOString(), created_at: now.toISOString() });
+    expect(dealPriority(deal, [], now).level).toBe("urgent");
+  });
+
+  it("flags a deal with no recent activity as stale", () => {
+    const oldCreated = new Date(now.getTime() - 30 * 86_400_000).toISOString();
+    const deal = makeDeal({ close_date: null, created_at: oldCreated });
+    expect(dealPriority(deal, [], now).level).toBe("stale");
+  });
+
+  it("uses the most recent activity, not created_at, to compute staleness", () => {
+    const oldCreated = new Date(now.getTime() - 30 * 86_400_000).toISOString();
+    const deal = makeDeal({ id: "d1", close_date: null, created_at: oldCreated });
+    const recentActivity = makeActivity({ deal_id: "d1", created_at: new Date(now.getTime() - 1 * 86_400_000).toISOString() });
+    expect(dealPriority(deal, [recentActivity], now).level).toBe("none");
+  });
+
+  it("flags a high-value deal with low BANT as risk", () => {
+    const deal = makeDeal({
+      close_date: null,
+      created_at: now.toISOString(),
+      value: 50_000,
+      qualification_score: 25,
+    });
+    expect(dealPriority(deal, [], now).level).toBe("risk");
+  });
+
+  it("does not treat qualification_score 0 (never assessed) as risk", () => {
+    const deal = makeDeal({
+      close_date: null,
+      created_at: now.toISOString(),
+      value: 50_000,
+      qualification_score: 0,
+    });
+    expect(dealPriority(deal, [], now).level).toBe("none");
+  });
+
+  it("prioritizes urgent over stale and risk when multiple reasons apply", () => {
+    const oldCreated = new Date(now.getTime() - 30 * 86_400_000).toISOString();
+    const deal = makeDeal({
+      close_date: new Date(2026, 4, 1).toISOString(),
+      created_at: oldCreated,
+      value: 50_000,
+      qualification_score: 25,
+    });
+    const result = dealPriority(deal, [], now);
+    expect(result.level).toBe("urgent");
+    expect(result.reasons).toEqual(expect.arrayContaining(["urgent", "stale", "risk"]));
   });
 });
 

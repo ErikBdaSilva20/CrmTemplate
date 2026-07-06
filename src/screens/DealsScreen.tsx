@@ -20,6 +20,7 @@ import { useStages, usePipelines } from "@/hooks/usePipelines";
 import { useContacts } from "@/hooks/useContacts";
 import { useCompanies } from "@/hooks/useCompanies";
 import { useLossReasons } from "@/hooks/useLossReasons";
+import { useActivities } from "@/hooks/useActivities";
 import {
   createDeal, updateDeal, deleteDeal, moveDealToStage, markDealWon, markDealLost,
   enrichDeals, type Deal,
@@ -43,6 +44,7 @@ export default function DealsScreen() {
   const { data: contacts } = useContacts();
   const { data: companies } = useCompanies();
   const { data: lossReasons } = useLossReasons();
+  const { data: activities } = useActivities();
 
   // Cache compartilhada (useDeals) + cruzamento local no front (enrichDeals),
   // espelhado num state próprio para permitir atualização otimista no drag do
@@ -246,6 +248,7 @@ export default function DealsScreen() {
           wonDeals={wonDeals}
           lostDeals={lostDeals}
           stages={pipelineStages}
+          activities={activities}
           onDragEnd={handleDragEnd}
           onDealClick={(d) => navigate(`/deals/${d.id}`)}
           onAddDeal={openNew}

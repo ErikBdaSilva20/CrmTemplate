@@ -60,6 +60,7 @@ export default function DealDetailScreen() {
   const [lossNote, setLossNote] = useState("");
 
   const [activityForm, setActivityForm] = useState({ type: "note" as ActivityType, title: "", body: "" });
+  const [statusActionPending, setStatusActionPending] = useState(false);
 
   useEffect(() => {
     if (dealsLoading) return;
@@ -126,19 +127,35 @@ export default function DealDetailScreen() {
   };
 
   const markAsWon = async () => {
-    await markDealWon(deal.id);
-    setDeal({ ...deal, status: "won", loss_reason: null });
-    refreshDeals();
-    toast.success("Negócio marcado como ganho! 🎉");
+    if (statusActionPending) return;
+    setStatusActionPending(true);
+    try {
+      await markDealWon(deal.id);
+      setDeal({ ...deal, status: "won", loss_reason: null });
+      refreshDeals();
+      toast.success("Negócio marcado como ganho! 🎉");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao marcar como ganho");
+    } finally {
+      setStatusActionPending(false);
+    }
   };
 
   const confirmLoss = async () => {
-    const reason = lossNote ? `${lossReason}: ${lossNote}` : lossReason;
-    await updateDeal(deal.id, { status: "lost", loss_reason: reason });
-    setDeal({ ...deal, status: "lost", loss_reason: reason });
-    setLossModalOpen(false);
-    refreshDeals();
-    toast.success("Negócio marcado como perdido");
+    if (statusActionPending) return;
+    setStatusActionPending(true);
+    try {
+      const reason = lossNote ? `${lossReason}: ${lossNote}` : lossReason;
+      await updateDeal(deal.id, { status: "lost", loss_reason: reason });
+      setDeal({ ...deal, status: "lost", loss_reason: reason });
+      setLossModalOpen(false);
+      refreshDeals();
+      toast.success("Negócio marcado como perdido");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao marcar como perdido");
+    } finally {
+      setStatusActionPending(false);
+    }
   };
 
   const openLossModal = () => {
@@ -148,10 +165,18 @@ export default function DealDetailScreen() {
   };
 
   const reopenDeal = async () => {
-    await updateDeal(deal.id, { status: "open" });
-    setDeal({ ...deal, status: "open" });
-    refreshDeals();
-    toast.success("Negócio reaberto");
+    if (statusActionPending) return;
+    setStatusActionPending(true);
+    try {
+      await updateDeal(deal.id, { status: "open" });
+      setDeal({ ...deal, status: "open" });
+      refreshDeals();
+      toast.success("Negócio reaberto");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao reabrir negócio");
+    } finally {
+      setStatusActionPending(false);
+    }
   };
 
   // owner_id setado pelo gateway — não enviar.
@@ -212,7 +237,7 @@ export default function DealDetailScreen() {
               </span>
             )}
 
-            <Select value={deal.stage_id || ""} onValueChange={changeStage}>
+            <Select value={deal.stage_id || ""} onValueChange={changeStage} disabled={deal.status !== "open"}>
               <SelectTrigger className="h-8 w-40">
                 <div className="flex items-center gap-1.5">
                   {currentStage?.color && <div className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: currentStage.color }} />}
@@ -239,17 +264,17 @@ export default function DealDetailScreen() {
 
         <div className="flex shrink-0 gap-2">
           {deal.status !== "won" && (
-            <Button variant="outline" onClick={markAsWon} className="flex-1 text-success border-success/30 hover:bg-success/10 sm:flex-none">
+            <Button variant="outline" onClick={markAsWon} disabled={statusActionPending} className="flex-1 text-success border-success/30 hover:bg-success/10 sm:flex-none">
               <Trophy className="mr-2 h-4 w-4" />Ganho
             </Button>
           )}
           {deal.status !== "lost" && (
-            <Button variant="outline" onClick={openLossModal} className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10 sm:flex-none">
+            <Button variant="outline" onClick={openLossModal} disabled={statusActionPending} className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10 sm:flex-none">
               <XCircle className="mr-2 h-4 w-4" />Perdido
             </Button>
           )}
           {deal.status !== "open" && (
-            <Button variant="outline" onClick={reopenDeal} className="flex-1 text-muted-foreground border-border hover:bg-muted sm:flex-none">
+            <Button variant="outline" onClick={reopenDeal} disabled={statusActionPending} className="flex-1 text-muted-foreground border-border hover:bg-muted sm:flex-none">
               <RotateCcw className="mr-2 h-4 w-4" />Reabrir
             </Button>
           )}
@@ -426,7 +451,7 @@ export default function DealDetailScreen() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setLossModalOpen(false)}>Cancelar</Button>
-            <Button variant="destructive" onClick={confirmLoss} disabled={!lossReason}>Confirmar Perda</Button>
+            <Button variant="destructive" onClick={confirmLoss} disabled={!lossReason || statusActionPending}>Confirmar Perda</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

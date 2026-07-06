@@ -163,6 +163,59 @@ export function selectTopDeals<T extends Deal>(openDeals: T[], limit = 4): T[] {
     .slice(0, limit);
 }
 
+export type DealPriorityLevel = "urgent" | "risk" | "stale" | "none";
+
+export interface DealPriority {
+  level: DealPriorityLevel;
+  reasons: DealPriorityLevel[];
+}
+
+const STALE_DAYS_DEFAULT = 14;
+const HIGH_VALUE_THRESHOLD_DEFAULT = 10_000;
+
+// Sinaliza deals abertos que precisam de atenção prioritária no Kanban:
+// fechamento vencido/no mês atual ("urgent" — close_date tem granularidade de
+// mês neste schema, ver MonthYearSelect, por isso usa monthsUntil <= 0 em vez
+// de uma janela de dias), sem atividade recente ("stale"), ou BANT baixo num
+// deal de alto valor ("risk"). qualification_score === 0 é tratado como
+// "nunca avaliado" (não conta para "risk") para não marcar falsamente
+// deals que simplesmente não passaram por qualificação ainda.
+export function dealPriority(
+  deal: Deal,
+  activities: Activity[],
+  now = new Date(),
+  staleDays = STALE_DAYS_DEFAULT,
+  highValueThreshold = HIGH_VALUE_THRESHOLD_DEFAULT,
+): DealPriority {
+  const reasons: DealPriorityLevel[] = [];
+
+  if (deal.close_date && monthsUntil(deal.close_date, now) <= 0) reasons.push("urgent");
+
+  const lastActivityAt = activities
+    .filter((a) => a.deal_id === deal.id && a.created_at)
+    .reduce<Date | null>((latest, a) => {
+      const d = new Date(a.created_at!);
+      return !latest || d > latest ? d : latest;
+    }, null);
+  const referenceDate = lastActivityAt ?? new Date(deal.created_at);
+  const daysSinceActivity = Math.floor((now.getTime() - referenceDate.getTime()) / 86_400_000);
+  if (daysSinceActivity > staleDays) reasons.push("stale");
+
+  const isHighValue = (Number(deal.value) || 0) >= highValueThreshold;
+  const isLowBant = deal.qualification_score > 0 && deal.qualification_score < 50;
+  if (isHighValue && isLowBant) reasons.push("risk");
+
+  const level = reasons.includes("urgent")
+    ? "urgent"
+    : reasons.includes("risk")
+      ? "risk"
+      : reasons.includes("stale")
+        ? "stale"
+        : "none";
+
+  return { level, reasons };
+}
+
 export interface AtRiskDeals {
   inactive: Deal[];
   closingSoon: Deal[];

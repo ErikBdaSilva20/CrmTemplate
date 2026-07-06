@@ -1,5 +1,7 @@
-import type { DealWithRelations, PipelineStage } from '@/lib/data';
-import { formatCurrency } from '@/lib/format';
+import type { Activity, DealWithRelations, PipelineStage } from '@/lib/data';
+import { formatCurrency, formatDate } from '@/lib/format';
+import { DEAL_STATUS } from '@/lib/domain';
+import { dealPriority, type DealPriorityLevel } from '@/lib/analytics';
 import { QualificationBar } from '@/components/crm/QualificationBar';
 import {
   DndContext,
@@ -15,8 +17,25 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import { ChevronDown, ChevronRight, GripVertical, Plus, Trophy, XCircle } from 'lucide-react';
+import { AlertTriangle, CalendarDays, ChevronDown, ChevronRight, Clock, GripVertical, Plus, Trophy, XCircle } from 'lucide-react';
 import { useState } from 'react';
+
+const PRIORITY_STYLES: Record<DealPriorityLevel, { border: string; badge: string; icon: typeof AlertTriangle; label: string } | null> = {
+  urgent: { border: 'border-destructive/50', badge: 'bg-destructive/10 text-destructive', icon: AlertTriangle, label: 'Urgente' },
+  risk: { border: 'border-warning/50', badge: 'bg-warning/10 text-warning', icon: AlertTriangle, label: 'Risco' },
+  stale: { border: 'border-muted-foreground/30', badge: 'bg-muted text-muted-foreground', icon: Clock, label: 'Parado' },
+  none: null,
+};
+
+const PRIORITY_RANK: Record<DealPriorityLevel, number> = { urgent: 0, risk: 1, stale: 2, none: 3 };
+
+// Deals que precisam de atenção sobem para o topo da coluna, sem embaralhar a
+// ordem relativa dentro do mesmo nível de prioridade.
+function sortByPriority(deals: DealWithRelations[], activities: Activity[]): DealWithRelations[] {
+  return [...deals].sort(
+    (a, b) => PRIORITY_RANK[dealPriority(a, activities).level] - PRIORITY_RANK[dealPriority(b, activities).level],
+  );
+}
 
 type Stage = PipelineStage;
 
@@ -25,11 +44,13 @@ type Stage = PipelineStage;
 function DealCard({
   deal,
   stages,
+  activities,
   onClick,
   onMoveStage,
 }: {
   deal: DealWithRelations;
   stages: Stage[];
+  activities: Activity[];
   onClick: () => void;
   onMoveStage: (stageId: string) => void;
 }) {
@@ -50,9 +71,12 @@ function DealCard({
   const currentIdx = orderedStages.findIndex((s) => s.id === deal.stage_id);
   const nextStage = orderedStages[currentIdx + 1];
 
+  const priority = dealPriority(deal, activities);
+  const priorityStyle = PRIORITY_STYLES[priority.level];
+
   return (
     <div ref={setNodeRef} style={style} className={isDragging ? 'opacity-40' : ''}>
-      <div className="flex items-stretch rounded-md border border-border bg-card transition-all hover:shadow-md">
+      <div className={`flex items-stretch rounded-md border bg-card transition-all hover:shadow-md ${priorityStyle?.border || 'border-border'}`}>
         {/* Drag handle — touch-none só aqui, não bloqueia o clique no card */}
         <button
           {...attributes}
@@ -75,6 +99,23 @@ function DealCard({
               {subtitle}
             </p>
           )}
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            <span className={`rounded px-1 py-0.5 text-[9px] font-medium ${DEAL_STATUS[deal.status].badgeClassName}`}>
+              {DEAL_STATUS[deal.status].label}
+            </span>
+            {deal.close_date && (
+              <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground">
+                <CalendarDays className="h-2.5 w-2.5" />
+                {formatDate(deal.close_date)}
+              </span>
+            )}
+            {priorityStyle && (
+              <span className={`flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-medium ${priorityStyle.badge}`}>
+                <priorityStyle.icon className="h-2.5 w-2.5" />
+                {priorityStyle.label}
+              </span>
+            )}
+          </div>
           <div className="mt-1.5 flex items-center justify-between gap-1">
             <span className="flex items-center gap-1 text-xs font-semibold text-foreground">
               <svg
@@ -124,6 +165,7 @@ function StageColumn({
   stage,
   deals,
   stages,
+  activities,
   onDealClick,
   onAddDeal,
   onMoveDeal,
@@ -131,6 +173,7 @@ function StageColumn({
   stage: Stage;
   deals: DealWithRelations[];
   stages: Stage[];
+  activities: Activity[];
   onDealClick: (d: DealWithRelations) => void;
   onAddDeal: (stageId: string) => void;
   onMoveDeal: (dealId: string, stageId: string) => void;
@@ -161,11 +204,12 @@ function StageColumn({
       />
 
       <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto max-h-[calc(100vh-240px)] pr-0.5">
-        {deals.map((deal) => (
+        {sortByPriority(deals, activities).map((deal) => (
           <DealCard
             key={deal.id}
             deal={deal}
             stages={stages}
+            activities={activities}
             onClick={() => onDealClick(deal)}
             onMoveStage={(stageId) => onMoveDeal(deal.id, stageId)}
           />
@@ -237,6 +281,11 @@ function CollapsibleStatusColumn({
               <p className={`text-xs font-semibold mt-0.5 ${color}`}>
                 {formatCurrency(Number(deal.value) || 0, deal.currency || 'BRL')}
               </p>
+              {deal.qualification_score > 0 && (
+                <div className="mt-1">
+                  <QualificationBar score={deal.qualification_score} />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -277,6 +326,7 @@ interface DealsKanbanProps {
   wonDeals: DealWithRelations[];
   lostDeals: DealWithRelations[];
   stages: Stage[];
+  activities: Activity[];
   onDragEnd: (dealId: string, newStageId: string) => void;
   onDealClick: (deal: DealWithRelations) => void;
   onAddDeal: (stageId?: string) => void;
@@ -289,6 +339,7 @@ export function DealsKanban({
   wonDeals,
   lostDeals,
   stages,
+  activities,
   onDragEnd,
   onDealClick,
   onAddDeal,
@@ -347,6 +398,7 @@ export function DealsKanban({
               stage={stage}
               deals={deals.filter((d) => d.stage_id === stage.id)}
               stages={stages}
+              activities={activities}
               onDealClick={onDealClick}
               onAddDeal={onAddDeal}
               onMoveDeal={onDragEnd}
