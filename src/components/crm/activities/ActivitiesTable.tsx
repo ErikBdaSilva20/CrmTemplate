@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -5,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { CalendarDays, Edit2, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { ACTIVITY_TYPE } from "@/lib/domain";
+import { isActivityOverdue } from "@/lib/date";
 import type { Activity, Company, Contact, Deal } from "@/lib/data";
 
 interface ActivitiesTableProps {
@@ -18,7 +20,6 @@ interface ActivitiesTableProps {
   onCreateClick: () => void;
 }
 
-const isOverdue = (a: Activity) => !a.completed_at && !!a.due_date && new Date(a.due_date) < new Date();
 
 // Visão em lista/tabela da tela de Atividades — resolve os relacionamentos
 // (contato/negócio/empresa) por lookup no front, já que o modo genérico do
@@ -33,9 +34,13 @@ export function ActivitiesTable({
   onDelete,
   onCreateClick,
 }: ActivitiesTableProps) {
-  const getContact = (id: string | null) => (id ? contacts.find((c) => c.id === id) : null);
-  const getCompany = (id: string | null) => (id ? companies.find((c) => c.id === id) : null);
-  const getDeal = (id: string | null) => (id ? deals.find((d) => d.id === id) : null);
+  const contactsMap = useMemo(() => new Map(contacts.map((c) => [c.id, c])), [contacts]);
+  const companiesMap = useMemo(() => new Map(companies.map((c) => [c.id, c])), [companies]);
+  const dealsMap = useMemo(() => new Map(deals.map((d) => [d.id, d])), [deals]);
+
+  const getContact = (id: string | null) => (id ? contactsMap.get(id) || null : null);
+  const getCompany = (id: string | null) => (id ? companiesMap.get(id) || null : null);
+  const getDeal = (id: string | null) => (id ? dealsMap.get(id) || null : null);
 
   return (
     <div className="rounded-md border border-border overflow-x-auto">
@@ -59,7 +64,7 @@ export function ActivitiesTable({
             const contact = getContact(a.contact_id);
             const deal = getDeal(a.deal_id);
             const company = getCompany(a.company_id) || (contact?.company_id ? getCompany(contact.company_id) : null);
-            const overdue = isOverdue(a);
+            const overdue = isActivityOverdue(a);
 
             return (
               <TableRow key={a.id} className={`group ${a.completed_at ? "opacity-40" : ""} ${overdue ? "bg-destructive/[0.03]" : ""}`}>

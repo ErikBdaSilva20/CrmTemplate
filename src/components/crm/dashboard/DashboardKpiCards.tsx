@@ -3,7 +3,7 @@ import { formatCurrencyCompact as fmt } from '@/lib/format';
 import { BarChart3, Clock, DollarSign, Handshake, Target, TrendingDown, TrendingUp, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-interface DashboardKpiCardsProps {
+export interface DashboardKpis {
   wonRevenue: number;
   revenueVariation: number;
   wonDealsCount: number;
@@ -16,21 +16,26 @@ interface DashboardKpiCardsProps {
   newContactsCount: number;
 }
 
+interface DashboardKpiCardsProps {
+  kpis: DashboardKpis;
+}
+
 // KPI row do Dashboard — 6 cards clicáveis que navegam pra tela de origem do
 // número (Receita/Ganhos/Win Rate/Ticket → Negócios; Ciclo → Atividades;
 // Contatos → Contatos).
-export function DashboardKpiCards({
-  wonRevenue,
-  revenueVariation,
-  wonDealsCount,
-  pipelineValue,
-  winRate,
-  totalClosed,
-  avgTicket,
-  avgCycle,
-  contactsCount,
-  newContactsCount,
-}: DashboardKpiCardsProps) {
+export function DashboardKpiCards({ kpis }: DashboardKpiCardsProps) {
+  const {
+    wonRevenue,
+    revenueVariation,
+    wonDealsCount,
+    pipelineValue,
+    winRate,
+    totalClosed,
+    avgTicket,
+    avgCycle,
+    contactsCount,
+    newContactsCount,
+  } = kpis;
   const navigate = useNavigate();
 
   return (

@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { formatCurrencyCompact as fmt, monthsUntil } from '@/lib/format';
+import { formatCurrencyCompact as fmt, monthsUntil, daysAgo } from '@/lib/format';
 import type { AtRiskDeals } from '@/lib/analytics';
 import { AlertTriangle, CalendarDays } from 'lucide-react';
 
@@ -27,9 +27,7 @@ export function RiskDealsSection({ atRiskDeals }: RiskDealsSectionProps) {
           {atRiskDeals.inactive.length > 0 ? (
             <div className="space-y-2">
               {atRiskDeals.inactive.map((d) => {
-                const daysSince = d.updated_at
-                  ? Math.floor((Date.now() - new Date(d.updated_at).getTime()) / 86400000)
-                  : 999;
+                const daysSince = d.updated_at ? daysAgo(d.updated_at) : 999;
                 return (
                   <div
                     key={d.id}

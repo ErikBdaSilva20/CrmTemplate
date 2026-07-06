@@ -246,7 +246,7 @@ export default function CompaniesScreen() {
                   <TableCell className="text-muted-foreground hidden sm:table-cell">{c.domain}</TableCell>
                   <TableCell className="text-muted-foreground hidden md:table-cell">{c.industry}</TableCell>
                   <TableCell className="text-muted-foreground hidden lg:table-cell">{c.size}</TableCell>
-                  <TableCell className="text-muted-foreground hidden lg:table-cell">{formatRevenue(Number(c.revenue))}</TableCell>
+                  <TableCell className="text-muted-foreground hidden lg:table-cell">{formatRevenue(c.revenue)}</TableCell>
                   <TableCell className="text-muted-foreground text-xs hidden md:table-cell">
                     {formatDate(c.created_at)}
                   </TableCell>
@@ -273,7 +273,7 @@ export default function CompaniesScreen() {
                   </div>
                 </div>
                 {c.domain && <p className="text-xs text-muted-foreground">{c.domain}</p>}
-                {c.revenue && <p className="text-sm font-semibold text-primary">{formatRevenue(Number(c.revenue))}</p>}
+                {c.revenue && <p className="text-sm font-semibold text-primary">{formatRevenue(c.revenue)}</p>}
               </CardContent>
             </Card>
           ))}

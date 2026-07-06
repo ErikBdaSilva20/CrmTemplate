@@ -94,13 +94,6 @@ create table if not exists tags (
   created_at timestamptz not null default now()
 );
 
-create table if not exists loss_reasons (
-  id          uuid primary key default gen_random_uuid(),
-  label       text not null,
-  is_active   boolean not null default true,
-  usage_count integer not null default 0,
-  created_at  timestamptz not null default now()
-);
 
 -- =============================================================================
 -- DADOS DO REP (owner_id text references "user"(id) — obrigatório)

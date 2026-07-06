@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -5,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertTriangle, ArrowUpDown } from "lucide-react";
 import { CONTACT_STATUS } from "@/lib/domain";
-import { formatDate } from "@/lib/format";
+import { formatDate, daysAgo } from "@/lib/format";
 import type { Company, Contact } from "@/lib/data";
 
 export type ContactsSortKey = "name" | "email" | "status" | "created_at" | "title";
@@ -46,11 +47,13 @@ export function ContactsTable({
   onToggleOne,
   onRowClick,
 }: ContactsTableProps) {
+  const companiesMap = useMemo(() => new Map(companies.map((c) => [c.id, c])), [companies]);
+
   const getInactivityDays = (contactId: string, createdAt: string | null) => {
     const lastAct = lastActivityMap.get(contactId);
     const ref = lastAct || (createdAt ? new Date(createdAt) : null);
     if (!ref) return null;
-    return Math.floor((Date.now() - ref.getTime()) / 86400000);
+    return daysAgo(ref);
   };
 
   return (
@@ -71,33 +74,34 @@ export function ContactsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {contacts.map((c) => (
-            <TableRow key={c.id} className="cursor-pointer" onClick={() => onRowClick(c.id)}>
-              <TableCell onClick={(e) => e.stopPropagation()}>
-                <Checkbox
-                  checked={selectedContacts.has(c.id)}
-                  onCheckedChange={() => onToggleOne(c.id)}
-                  aria-label={`Selecionar ${c.first_name}`}
-                />
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                      {c.first_name[0]}
-                      {c.last_name?.[0] || ""}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-medium truncate">
-                        {c.first_name} {c.last_name}
-                      </span>
-                      {(() => {
-                        const days = getInactivityDays(c.id, c.created_at);
-                        if (days === null || days < 14) return null;
-                        const isHigh = days >= 21;
-                        return (
+          {contacts.map((c) => {
+            const days = getInactivityDays(c.id, c.created_at);
+            const isInactive = days !== null && days < 14 ? false : days !== null;
+            const isHigh = days !== null && days >= 21;
+
+            return (
+              <TableRow key={c.id} className="cursor-pointer" onClick={() => onRowClick(c.id)}>
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={selectedContacts.has(c.id)}
+                    onCheckedChange={() => onToggleOne(c.id)}
+                    aria-label={`Selecionar ${c.first_name}`}
+                  />
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-8 w-8 shrink-0">
+                      <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                        {c.first_name[0]}
+                        {c.last_name?.[0] || ""}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium truncate">
+                          {c.first_name} {c.last_name}
+                        </span>
+                        {isInactive && (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -113,27 +117,27 @@ export function ContactsTable({
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                        );
-                      })()}
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground truncate block sm:hidden">{c.email}</span>
                     </div>
-                    <span className="text-xs text-muted-foreground truncate block sm:hidden">{c.email}</span>
                   </div>
-                </div>
-              </TableCell>
-              <TableCell className="text-muted-foreground hidden sm:table-cell">{c.email}</TableCell>
-              <TableCell className="text-muted-foreground hidden md:table-cell text-xs">
-                {companies.find((co) => co.id === c.company_id)?.name || "—"}
-              </TableCell>
-              <TableCell className="text-muted-foreground hidden lg:table-cell">{c.title}</TableCell>
-              <TableCell className="text-muted-foreground hidden lg:table-cell">{c.phone}</TableCell>
-              <TableCell>
-                <Badge variant="secondary" className={CONTACT_STATUS[c.status || "lead"].badgeClassName}>
-                  {CONTACT_STATUS[c.status || "lead"].label}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-muted-foreground text-xs hidden md:table-cell">{formatDate(c.created_at)}</TableCell>
-            </TableRow>
-          ))}
+                </TableCell>
+                <TableCell className="text-muted-foreground hidden sm:table-cell">{c.email}</TableCell>
+                <TableCell className="text-muted-foreground hidden md:table-cell text-xs">
+                  {c.company_id ? companiesMap.get(c.company_id)?.name || "—" : "—"}
+                </TableCell>
+                <TableCell className="text-muted-foreground hidden lg:table-cell">{c.title}</TableCell>
+                <TableCell className="text-muted-foreground hidden lg:table-cell">{c.phone}</TableCell>
+                <TableCell>
+                  <Badge variant="secondary" className={CONTACT_STATUS[c.status || "lead"].badgeClassName}>
+                    {CONTACT_STATUS[c.status || "lead"].label}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-muted-foreground text-xs hidden md:table-cell">{formatDate(c.created_at)}</TableCell>
+              </TableRow>
+            );
+          })}
           {contacts.length === 0 && (
             <TableRow>
               <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">

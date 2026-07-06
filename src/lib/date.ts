@@ -38,3 +38,8 @@ export function toLocalDateKey(date: Date): string {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+export function isActivityOverdue(activity: { completed_at?: string | Date | null; due_date?: string | Date | null }): boolean {
+  return !activity.completed_at && !!activity.due_date && new Date(activity.due_date) < new Date();
+}
+

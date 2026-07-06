@@ -39,9 +39,9 @@ export function formatMonthYear(date: string | Date | null | undefined): string 
   return new Date(date).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 }
 
-export function daysAgo(date: string | Date | null | undefined): number {
+export function daysAgo(date: string | Date | null | undefined, now: Date = new Date()): number {
   if (!date) return 0;
-  return Math.floor((Date.now() - new Date(date).getTime()) / 86_400_000);
+  return Math.floor((now.getTime() - new Date(date).getTime()) / 86_400_000);
 }
 
 // Calendar-month distance (not day count) — deals store close_date as the 1st

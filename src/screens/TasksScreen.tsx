@@ -34,7 +34,7 @@ import {
 import { startOfDay, endOfDay, getWeekRange } from "@/lib/date";
 import { dueDateForBucket, type TaskBucket } from "@/lib/tasks";
 import { formatDateShort } from "@/lib/format";
-
+import { SegmentedToggle } from "@/components/ui/segmented-toggle";
 type ViewMode = "list" | "kanban";
 
 type DateFilter = "todo" | "overdue" | "today" | "tomorrow" | "this_week" | "done";
@@ -226,24 +226,14 @@ export default function TasksScreen() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
-            <button
-              onClick={() => setViewMode("kanban")}
-              aria-label="Visualização Kanban"
-              className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "kanban" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <Kanban className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Kanban</span>
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              aria-label="Visualização lista"
-              className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <List className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Lista</span>
-            </button>
-          </div>
+          <SegmentedToggle
+            options={[
+              { value: "kanban", label: "Kanban", icon: Kanban, ariaLabel: "Visualização Kanban" },
+              { value: "list", label: "Lista", icon: List, ariaLabel: "Visualização lista" },
+            ]}
+            value={viewMode}
+            onChange={setViewMode}
+          />
           <Button onClick={openCreate} size="sm">
             <Plus className="mr-1.5 h-3.5 w-3.5" />Tarefa
           </Button>

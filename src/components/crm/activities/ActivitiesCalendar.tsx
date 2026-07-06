@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ACTIVITY_TYPE } from "@/lib/domain";
-import { toLocalDateKey } from "@/lib/date";
+import { toLocalDateKey, isActivityOverdue } from "@/lib/date";
 import type { Activity } from "@/lib/data";
 
 const WEEKDAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -11,7 +11,6 @@ const MONTH_NAMES_PT = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
-const isOverdue = (a: Activity) => !a.completed_at && !!a.due_date && new Date(a.due_date) < new Date();
 
 export interface CalendarMonth {
   year: number;
@@ -114,7 +113,7 @@ export function ActivitiesCalendar({ activities, calMonth, onMonthChange }: Acti
                   return (
                     <div
                       key={a.id}
-                      className={`flex items-center gap-1 rounded px-1 py-0.5 text-[9px] truncate bg-muted/50 ${isOverdue(a) ? "ring-1 ring-destructive" : ""}`}
+                      className={`flex items-center gap-1 rounded px-1 py-0.5 text-[9px] truncate bg-muted/50 ${isActivityOverdue(a) ? "ring-1 ring-destructive" : ""}`}
                     >
                       <ActIcon className={`h-2.5 w-2.5 shrink-0 ${ACTIVITY_TYPE[a.type].textClassName}`} />
                       <span className="truncate">{a.title}</span>

@@ -130,7 +130,7 @@ export default function DashboardScreen() {
     const goal = salesGoals.find(
       (g) => g.goal_type === 'revenue' && g.period_month === now.getMonth() + 1 && g.period_year === now.getFullYear()
     );
-    return goal ? goal.target_value || DEFAULT_MONTHLY_REVENUE_GOAL : DEFAULT_MONTHLY_REVENUE_GOAL;
+    return goal ? (goal.target_value ?? DEFAULT_MONTHLY_REVENUE_GOAL) : DEFAULT_MONTHLY_REVENUE_GOAL;
   }, [salesGoals]);
 
   return (
@@ -147,16 +147,18 @@ export default function DashboardScreen() {
       />
 
       <DashboardKpiCards
-        wonRevenue={wonRevenue}
-        revenueVariation={revenueVariation}
-        wonDealsCount={wonDeals.length}
-        pipelineValue={pipelineValue}
-        winRate={winRate}
-        totalClosed={totalClosed}
-        avgTicket={avgTicket}
-        avgCycle={avgCycle}
-        contactsCount={contacts.length}
-        newContactsCount={contacts.filter((c) => isInPeriod(c.created_at, periodStart)).length}
+        kpis={{
+          wonRevenue,
+          revenueVariation,
+          wonDealsCount: wonDeals.length,
+          pipelineValue,
+          winRate,
+          totalClosed,
+          avgTicket,
+          avgCycle,
+          contactsCount: contacts.length,
+          newContactsCount: contacts.filter((c) => isInPeriod(c.created_at, periodStart)).length,
+        }}
       />
 
       <RevenueSection monthlyRevenue={monthlyRevenue} wonRevenue={wonRevenue} monthlyGoal={monthlyGoal} />

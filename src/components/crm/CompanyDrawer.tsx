@@ -160,10 +160,11 @@ export function CompanyDrawer({ company, onClose, onUpdate }: CompanyDrawerProps
                     <span>{company.size} funcionários</span>
                   </div>
                 )}
+
                 {company.revenue && (
                   <div className="flex items-center gap-3 text-sm">
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    <span>Receita: {formatCurrency(Number(company.revenue))}</span>
+                    <span>Receita: {formatCurrency(company.revenue)}</span>
                   </div>
                 )}
                 <div className="flex items-center gap-3 text-sm">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { GripVertical, Handshake, User as UserIcon, Building2, Clock, AlertTriangle } from "lucide-react";
 import {
@@ -100,17 +100,17 @@ function TaskCard({
 function BucketColumn({
   bucket,
   tasks,
-  contacts,
-  deals,
-  companies,
+  contactsMap,
+  dealsMap,
+  companiesMap,
   ownerName,
   onTaskClick,
 }: {
   bucket: TaskBucket;
   tasks: Activity[];
-  contacts: Contact[];
-  deals: Deal[];
-  companies: Company[];
+  contactsMap: Map<string, Contact>;
+  dealsMap: Map<string, Deal>;
+  companiesMap: Map<string, Company>;
   ownerName: string;
   onTaskClick: (task: Activity) => void;
 }) {
@@ -131,10 +131,10 @@ function BucketColumn({
       </div>
       <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto p-2 max-h-[calc(100vh-260px)]">
         {tasks.map((task) => {
-          const contact = task.contact_id ? contacts.find((c) => c.id === task.contact_id) ?? null : null;
-          const deal = task.deal_id ? deals.find((d) => d.id === task.deal_id) ?? null : null;
+          const contact = task.contact_id ? contactsMap.get(task.contact_id) ?? null : null;
+          const deal = task.deal_id ? dealsMap.get(task.deal_id) ?? null : null;
           const companyId = task.company_id || deal?.company_id || contact?.company_id || null;
-          const company = companyId ? companies.find((c) => c.id === companyId) ?? null : null;
+          const company = companyId ? companiesMap.get(companyId) ?? null : null;
           return (
             <TaskCard
               key={task.id}
@@ -181,6 +181,10 @@ export function TasksKanban({
   const keyboardSensor = useSensor(KeyboardSensor);
   const sensors = useSensors(pointerSensor, touchSensor, keyboardSensor);
 
+  const contactsMap = useMemo(() => new Map(contacts.map((c) => [c.id, c])), [contacts]);
+  const dealsMap = useMemo(() => new Map(deals.map((d) => [d.id, d])), [deals]);
+  const companiesMap = useMemo(() => new Map(companies.map((c) => [c.id, c])), [companies]);
+
   const handleDragStart = (event: DragStartEvent) => {
     setActiveTask(tasks.find((t) => t.id === event.active.id) || null);
   };
@@ -209,9 +213,9 @@ export function TasksKanban({
             key={bucket}
             bucket={bucket}
             tasks={tasks.filter((t) => getTaskBucket(t) === bucket)}
-            contacts={contacts}
-            deals={deals}
-            companies={companies}
+            contactsMap={contactsMap}
+            dealsMap={dealsMap}
+            companiesMap={companiesMap}
             ownerName={ownerName}
             onTaskClick={onTaskClick}
           />

@@ -1,11 +1,11 @@
-import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Building2, User, DollarSign, CalendarDays } from "lucide-react";
-import { QualificationBar } from "@/components/crm/QualificationBar";
-import { DEAL_STATUS, ACTIVITY_TYPE } from "@/lib/domain";
-import { formatCurrency, formatDate } from "@/lib/format";
-import type { Activity, DealWithRelations } from "@/lib/data";
+import { QualificationBar } from '@/components/crm/QualificationBar';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import type { Activity, DealWithRelations } from '@/lib/data';
+import { ACTIVITY_TYPE, DEAL_STATUS } from '@/lib/domain';
+import { formatCurrency, formatDate } from '@/lib/format';
+import { Building2, CalendarDays, DollarSign, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const MAX_VISIBLE_ACTIVITIES = 3;
 
@@ -22,11 +22,11 @@ export function EntityInfoCard({ deal, activities }: EntityInfoCardProps) {
 
   const dealActivities = activities
     .filter((a) => a.deal_id === deal.id)
-    .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))
+    .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
     .slice(0, MAX_VISIBLE_ACTIVITIES);
 
   const contactName = deal.contact
-    ? `${deal.contact.first_name} ${deal.contact.last_name || ""}`.trim()
+    ? `${deal.contact.first_name} ${deal.contact.last_name || ''}`.trim()
     : null;
 
   return (
@@ -37,8 +37,13 @@ export function EntityInfoCard({ deal, activities }: EntityInfoCardProps) {
           onClick={() => navigate(`/deals/${deal.id}`)}
           className="flex w-full items-center justify-between gap-2 text-left hover:opacity-80 transition-opacity"
         >
-          <CardTitle className="min-w-0 flex-1 truncate text-sm font-medium">{deal.title}</CardTitle>
-          <Badge variant="secondary" className={`shrink-0 ${DEAL_STATUS[deal.status].badgeClassName}`}>
+          <CardTitle className="min-w-0 flex-1 truncate text-sm font-medium">
+            {deal.title}
+          </CardTitle>
+          <Badge
+            variant="secondary"
+            className={`shrink-0 ${DEAL_STATUS[deal.status].badgeClassName}`}
+          >
             {DEAL_STATUS[deal.status].label}
           </Badge>
         </button>
@@ -64,7 +69,7 @@ export function EntityInfoCard({ deal, activities }: EntityInfoCardProps) {
         <div className="flex items-center justify-between text-xs">
           <span className="flex items-center gap-1 font-semibold text-foreground">
             <DollarSign className="h-3 w-3 text-muted-foreground" />
-            {formatCurrency(deal.value, deal.currency || "BRL")}
+            {formatCurrency(deal.value, deal.currency || 'BRL')}
           </span>
           <span className="flex items-center gap-1 text-muted-foreground">
             <CalendarDays className="h-3 w-3" />

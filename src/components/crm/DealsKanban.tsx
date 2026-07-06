@@ -1,8 +1,8 @@
-import type { Activity, DealWithRelations, PipelineStage } from '@/lib/data';
-import { formatCurrency, formatDate } from '@/lib/format';
-import { DEAL_STATUS } from '@/lib/domain';
-import { dealPriority, type DealPriorityLevel } from '@/lib/analytics';
 import { QualificationBar } from '@/components/crm/QualificationBar';
+import { dealPriority, type DealPriorityLevel } from '@/lib/analytics';
+import type { Activity, DealWithRelations, PipelineStage } from '@/lib/data';
+import { DEAL_STATUS } from '@/lib/domain';
+import { formatCurrency, formatDate } from '@/lib/format';
 import {
   DndContext,
   DragEndEvent,
@@ -17,13 +17,41 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import { AlertTriangle, CalendarDays, ChevronDown, ChevronRight, Clock, GripVertical, Plus, Trophy, XCircle } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarDays,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  GripVertical,
+  Plus,
+  Trophy,
+  XCircle,
+} from 'lucide-react';
 import { useState } from 'react';
 
-const PRIORITY_STYLES: Record<DealPriorityLevel, { border: string; badge: string; icon: typeof AlertTriangle; label: string } | null> = {
-  urgent: { border: 'border-destructive/50', badge: 'bg-destructive/10 text-destructive', icon: AlertTriangle, label: 'Urgente' },
-  risk: { border: 'border-warning/50', badge: 'bg-warning/10 text-warning', icon: AlertTriangle, label: 'Risco' },
-  stale: { border: 'border-muted-foreground/30', badge: 'bg-muted text-muted-foreground', icon: Clock, label: 'Parado' },
+const PRIORITY_STYLES: Record<
+  DealPriorityLevel,
+  { border: string; badge: string; icon: typeof AlertTriangle; label: string } | null
+> = {
+  urgent: {
+    border: 'border-destructive/50',
+    badge: 'bg-destructive/10 text-destructive',
+    icon: AlertTriangle,
+    label: 'Urgente',
+  },
+  risk: {
+    border: 'border-warning/50',
+    badge: 'bg-warning/10 text-warning',
+    icon: AlertTriangle,
+    label: 'Risco',
+  },
+  stale: {
+    border: 'border-muted-foreground/30',
+    badge: 'bg-muted text-muted-foreground',
+    icon: Clock,
+    label: 'Parado',
+  },
   none: null,
 };
 
@@ -33,7 +61,9 @@ const PRIORITY_RANK: Record<DealPriorityLevel, number> = { urgent: 0, risk: 1, s
 // ordem relativa dentro do mesmo nível de prioridade.
 function sortByPriority(deals: DealWithRelations[], activities: Activity[]): DealWithRelations[] {
   return [...deals].sort(
-    (a, b) => PRIORITY_RANK[dealPriority(a, activities).level] - PRIORITY_RANK[dealPriority(b, activities).level],
+    (a, b) =>
+      PRIORITY_RANK[dealPriority(a, activities).level] -
+      PRIORITY_RANK[dealPriority(b, activities).level]
   );
 }
 
@@ -76,7 +106,9 @@ function DealCard({
 
   return (
     <div ref={setNodeRef} style={style} className={isDragging ? 'opacity-40' : ''}>
-      <div className={`flex items-stretch rounded-md border bg-card transition-all hover:shadow-md ${priorityStyle?.border || 'border-border'}`}>
+      <div
+        className={`flex items-stretch rounded-md border bg-card transition-all hover:shadow-md ${priorityStyle?.border || 'border-border'}`}
+      >
         {/* Drag handle — touch-none só aqui, não bloqueia o clique no card */}
         <button
           {...attributes}
@@ -100,7 +132,9 @@ function DealCard({
             </p>
           )}
           <div className="mt-1 flex flex-wrap items-center gap-1">
-            <span className={`rounded px-1 py-0.5 text-[9px] font-medium ${DEAL_STATUS[deal.status].badgeClassName}`}>
+            <span
+              className={`rounded px-1 py-0.5 text-[9px] font-medium ${DEAL_STATUS[deal.status].badgeClassName}`}
+            >
               {DEAL_STATUS[deal.status].label}
             </span>
             {deal.close_date && (
@@ -110,7 +144,9 @@ function DealCard({
               </span>
             )}
             {priorityStyle && (
-              <span className={`flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-medium ${priorityStyle.badge}`}>
+              <span
+                className={`flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-medium ${priorityStyle.badge}`}
+              >
                 <priorityStyle.icon className="h-2.5 w-2.5" />
                 {priorityStyle.label}
               </span>
@@ -301,20 +337,26 @@ function WonLostDropZone({
   label,
   icon: Icon,
   color,
+  className = '',
 }: {
   id: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   color: string;
+  className?: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
     <div
       ref={setNodeRef}
-      className={`flex w-16 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-dashed transition-all ${isOver ? 'border-primary bg-primary/10 scale-105' : 'border-border bg-muted/10'}`}
+      className={`flex shrink-0 flex-col items-center justify-center rounded-xl border-2 border-dashed transition-all ${
+        isOver
+          ? 'border-primary bg-primary/10 scale-[1.02] shadow-md'
+          : 'border-muted-foreground/30 bg-background/80 backdrop-blur-sm hover:border-primary/50'
+      } ${className}`}
     >
-      <Icon className={`h-5 w-5 ${color}`} />
-      <span className={`mt-1 text-[10px] font-medium ${color}`}>{label}</span>
+      <Icon className={`h-8 w-8 ${color} mb-1`} />
+      <span className={`text-[13px] font-bold ${color}`}>{label}</span>
     </div>
   );
 }
@@ -404,8 +446,32 @@ export function DealsKanban({
               onMoveDeal={onDragEnd}
             />
           ))}
-          <WonLostDropZone id="won-drop" label="Ganho" icon={Trophy} color="text-success" />
-          <WonLostDropZone id="lost-drop" label="Perdido" icon={XCircle} color="text-destructive" />
+        </div>
+
+        {/* Floating Drop Zones (visíveis apenas durante o drag) */}
+        <div
+          className={`fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 gap-4 transition-all duration-300 ${
+            activeDeal
+              ? 'translate-y-0 opacity-100 pointer-events-auto'
+              : 'translate-y-10 opacity-0 pointer-events-none'
+          }`}
+        >
+          <div className="flex items-center gap-4 rounded-2xl border border-border/50 bg-background/60 p-3 shadow-2xl backdrop-blur-xl">
+            <WonLostDropZone
+              id="won-drop"
+              label="Ganho"
+              icon={Trophy}
+              color="text-success"
+              className="h-28 w-36 sm:w-48"
+            />
+            <WonLostDropZone
+              id="lost-drop"
+              label="Perdido"
+              icon={XCircle}
+              color="text-destructive"
+              className="h-28 w-36 sm:w-48"
+            />
+          </div>
         </div>
 
         <DragOverlay>

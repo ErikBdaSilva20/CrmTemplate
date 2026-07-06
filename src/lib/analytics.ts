@@ -5,7 +5,7 @@
 // JSX. Pulling them out here makes each calculation independently testable
 // and keeps the screen focused on layout.
 import { ACTIVITY_TYPE, CONTACT_STATUS } from "@/lib/domain";
-import { monthsUntil } from "@/lib/format";
+import { monthsUntil, daysAgo } from "@/lib/format";
 import type { Activity, Contact, Deal, PipelineStage, SalesGoal } from "@/lib/data";
 
 export type PeriodFilter = "today" | "this_week" | "this_month" | "this_quarter" | "this_year" | "all";
@@ -198,7 +198,7 @@ export function dealPriority(
       return !latest || d > latest ? d : latest;
     }, null);
   const referenceDate = lastActivityAt ?? new Date(deal.created_at);
-  const daysSinceActivity = Math.floor((now.getTime() - referenceDate.getTime()) / 86_400_000);
+  const daysSinceActivity = daysAgo(referenceDate, now);
   if (daysSinceActivity > staleDays) reasons.push("stale");
 
   const isHighValue = deal.value >= highValueThreshold;

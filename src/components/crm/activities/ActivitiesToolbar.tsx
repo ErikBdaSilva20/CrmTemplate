@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { CalendarDays, List, Plus } from "lucide-react";
 import { ACTIVITY_TYPE, ACTIVITY_TYPES } from "@/lib/domain";
+import { SegmentedToggle } from "@/components/ui/segmented-toggle";
 
 export type ViewMode = "list" | "calendar";
 export type DateFilter = "todo" | "overdue" | "today" | "tomorrow" | "this_week" | "next_week" | "next_30_days";
@@ -57,22 +58,14 @@ export function ActivitiesToolbar({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
-            <button
-              onClick={() => onViewModeChange("list")}
-              aria-label="Lista"
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <List className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => onViewModeChange("calendar")}
-              aria-label="Calendário"
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "calendar" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <CalendarDays className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          <SegmentedToggle
+            options={[
+              { value: "list", icon: List, ariaLabel: "Lista" },
+              { value: "calendar", icon: CalendarDays, ariaLabel: "Calendário" },
+            ]}
+            value={viewMode}
+            onChange={onViewModeChange}
+          />
           <Button onClick={onCreateClick} size="sm">
             <Plus className="mr-1.5 h-3.5 w-3.5" />Atividade
           </Button>

@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Columns3, Download, Filter, LayoutGrid, List, Plus, Search, Upload, X } from "lucide-react";
 import { CONTACT_STATUS, CONTACT_STATUSES } from "@/lib/domain";
 import type { Company } from "@/lib/data";
+import { SegmentedToggle } from "@/components/ui/segmented-toggle";
 
 export type ContactsViewMode = "table" | "cards" | "status";
 
@@ -77,32 +78,15 @@ export function ContactsToolbar({
               </button>
             )}
           </div>
-          <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
-            <button
-              onClick={() => onViewModeChange("table")}
-              aria-label="Visualização tabela"
-              className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "table" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <List className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Tabela</span>
-            </button>
-            <button
-              onClick={() => onViewModeChange("cards")}
-              aria-label="Visualização cartões"
-              className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "cards" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Cartões</span>
-            </button>
-            <button
-              onClick={() => onViewModeChange("status")}
-              aria-label="Visualização funil por status"
-              className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "status" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <Columns3 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Funil</span>
-            </button>
-          </div>
+          <SegmentedToggle
+            options={[
+              { value: "table", label: "Tabela", icon: List, ariaLabel: "Visualização tabela" },
+              { value: "cards", label: "Cartões", icon: LayoutGrid, ariaLabel: "Visualização cartões" },
+              { value: "status", label: "Funil", icon: Columns3, ariaLabel: "Visualização funil por status" },
+            ]}
+            value={viewMode}
+            onChange={onViewModeChange}
+          />
           <Button variant="outline" size="sm" onClick={onToggleFilters} aria-label="Alternar filtros">
             <Filter className="mr-1 h-3.5 w-3.5" />
             <span className="hidden sm:inline">Filtros</span>

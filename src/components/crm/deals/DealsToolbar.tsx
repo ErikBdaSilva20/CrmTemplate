@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Filter, Kanban, List, Plus, Settings2 } from "lucide-react";
 import type { Pipeline } from "@/lib/data";
+import { SegmentedToggle } from "@/components/ui/segmented-toggle";
 
 export type DealsViewMode = "kanban" | "list";
 
@@ -38,23 +39,14 @@ export function DealsToolbar({
       <div className="flex items-center gap-3">
         <h1 className="text-lg sm:text-xl font-bold tracking-tight">Negócios</h1>
 
-        <div className="flex rounded-md border border-border bg-muted/50 p-0.5">
-          {[
-            { mode: "kanban" as const, icon: Kanban, label: "Kanban" },
-            { mode: "list" as const, icon: List, label: "Lista" },
-          ].map(({ mode, icon: Icon, label }) => (
-            <button
-              key={mode}
-              onClick={() => onViewModeChange(mode)}
-              aria-label={`Visualização ${label}`}
-              className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
-                viewMode === mode ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5" /><span className="hidden sm:inline">{label}</span>
-            </button>
-          ))}
-        </div>
+        <SegmentedToggle
+          options={[
+            { value: "kanban", label: "Kanban", icon: Kanban, ariaLabel: "Visualização Kanban" },
+            { value: "list", label: "Lista", icon: List, ariaLabel: "Visualização Lista" },
+          ]}
+          value={viewMode}
+          onChange={onViewModeChange}
+        />
 
         <Button onClick={onNewDeal} size="sm" className="gap-1">
           <Plus className="h-3.5 w-3.5" /><span className="hidden sm:inline">Negócio</span>
