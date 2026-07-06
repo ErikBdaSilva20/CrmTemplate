@@ -1,0 +1,29 @@
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import type { WeekdayCount } from '@/lib/analytics';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { tooltipStyle } from './chartTheme';
+
+interface ActivitiesByDayChartProps {
+  data: WeekdayCount[];
+}
+
+export function ActivitiesByDayChart({ data }: ActivitiesByDayChartProps) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Atividades por Dia da Semana</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ResponsiveContainer width="100%" height={180}>
+          <BarChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis dataKey="day" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+            <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+            <Tooltip contentStyle={tooltipStyle} />
+            <Bar dataKey="count" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </CardContent>
+    </Card>
+  );
+}
