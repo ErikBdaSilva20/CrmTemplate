@@ -130,7 +130,7 @@ function DealCard({
                 <line x1="12" y1="1" x2="12" y2="23" />
                 <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
               </svg>
-              {formatCurrency(Number(deal.value) || 0, deal.currency || 'BRL')}
+              {formatCurrency(deal.value, deal.currency || 'BRL')}
             </span>
 
             {/* Botão de avanço de estágio — visível só no mobile */}
@@ -179,7 +179,7 @@ function StageColumn({
   onMoveDeal: (dealId: string, stageId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
-  const total = deals.reduce((s, d) => s + (Number(d.value) || 0), 0);
+  const total = deals.reduce((s, d) => s + d.value, 0);
 
   return (
     <div
@@ -241,7 +241,7 @@ function CollapsibleStatusColumn({
   onDealClick: (d: DealWithRelations) => void;
 }) {
   const [collapsed, setCollapsed] = useState(true);
-  const total = deals.reduce((s, d) => s + (Number(d.value) || 0), 0);
+  const total = deals.reduce((s, d) => s + d.value, 0);
   if (deals.length === 0) return null;
 
   return (
@@ -279,7 +279,7 @@ function CollapsibleStatusColumn({
                 <p className="truncate text-[11px] text-muted-foreground">{deal.company.name}</p>
               )}
               <p className={`text-xs font-semibold mt-0.5 ${color}`}>
-                {formatCurrency(Number(deal.value) || 0, deal.currency || 'BRL')}
+                {formatCurrency(deal.value, deal.currency || 'BRL')}
               </p>
               {deal.qualification_score > 0 && (
                 <div className="mt-1">
@@ -414,7 +414,7 @@ export function DealsKanban({
               <div className="rounded-md border border-primary bg-card p-2.5 shadow-lg">
                 <p className="text-[13px] font-medium">{activeDeal.title}</p>
                 <p className="text-xs font-semibold text-foreground mt-0.5">
-                  {formatCurrency(Number(activeDeal.value) || 0, activeDeal.currency || 'BRL')}
+                  {formatCurrency(activeDeal.value, activeDeal.currency || 'BRL')}
                 </p>
               </div>
             </div>

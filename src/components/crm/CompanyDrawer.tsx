@@ -67,9 +67,9 @@ export function CompanyDrawer({ company, onClose, onUpdate }: CompanyDrawerProps
   if (!company) return null;
 
   const totalDeals = deals.length;
-  const totalValue = deals.reduce((s, d) => s + (Number(d.value) || 0), 0);
+  const totalValue = deals.reduce((s, d) => s + d.value, 0);
   const wonDeals = deals.filter((d) => d.status === "won");
-  const wonValue = wonDeals.reduce((s, d) => s + (Number(d.value) || 0), 0);
+  const wonValue = wonDeals.reduce((s, d) => s + d.value, 0);
 
   return (
     <Sheet open={!!company} onOpenChange={(open) => !open && onClose()}>
@@ -211,7 +211,7 @@ export function CompanyDrawer({ company, onClose, onUpdate }: CompanyDrawerProps
                           </Badge>
                         </div>
                       </div>
-                      <span className="text-sm font-bold text-primary">{formatCurrency(Number(d.value) || 0, d.currency || "BRL")}</span>
+                      <span className="text-sm font-bold text-primary">{formatCurrency(d.value, d.currency || "BRL")}</span>
                     </div>
                   </CardContent>
                 </Card>

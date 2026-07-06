@@ -261,7 +261,7 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies }: Contact
                         </div>
                       </div>
                       <span className="text-sm font-bold text-primary">
-                        {formatCurrency(Number(d.value) || 0, d.currency || "BRL")}
+                        {formatCurrency(d.value, d.currency || "BRL")}
                       </span>
                     </div>
                   </CardContent>

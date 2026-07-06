@@ -189,7 +189,7 @@ export default function SalesGoalsScreen() {
             const info = goalTypeInfo(g.goal_type);
             const Icon = info.icon;
             const current = computeGoalActual(g, deals, activities, contacts, month, year);
-            const target = Number(g.target_value);
+            const target = g.target_value;
             const p = pct(current, target);
             const remaining = Math.max(target - current, 0);
             const pace = computeGoalPace(p, month, year);

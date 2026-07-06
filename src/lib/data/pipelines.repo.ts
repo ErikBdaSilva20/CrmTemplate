@@ -18,11 +18,19 @@ export const updatePipeline = (id: string, patch: PipelineUpdate) =>
   db.table<Pipeline>("pipelines").update(id, patch);
 export const deletePipeline = (id: string) => db.table<Pipeline>("pipelines").remove(id);
 
-export const listStages = () => db.table<PipelineStage>("pipeline_stages").list();
-export const createStage = (input: PipelineStageInsert) =>
-  db.table<PipelineStage>("pipeline_stages").create(input);
-export const updateStage = (id: string, patch: PipelineStageUpdate) =>
-  db.table<PipelineStage>("pipeline_stages").update(id, patch);
+// win_probability is Postgres `numeric` — can arrive as a string over the
+// gateway's JSON despite the generated `number` type. Normalize once here
+// (see Masia Clone-Template Audit Framework §7).
+function normalizeStage(s: PipelineStage): PipelineStage {
+  return { ...s, win_probability: Number(s.win_probability) || 0 };
+}
+
+export const listStages = async () =>
+  (await db.table<PipelineStage>("pipeline_stages").list()).map(normalizeStage);
+export const createStage = async (input: PipelineStageInsert) =>
+  normalizeStage(await db.table<PipelineStage>("pipeline_stages").create(input));
+export const updateStage = async (id: string, patch: PipelineStageUpdate) =>
+  normalizeStage(await db.table<PipelineStage>("pipeline_stages").update(id, patch));
 export const deleteStage = (id: string) => db.table<PipelineStage>("pipeline_stages").remove(id);
 
 // Estágios de um pipeline, ordenados — filtro/sort no front.

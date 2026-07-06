@@ -44,7 +44,7 @@ export function PipelineEditor({ open, onOpenChange, pipelineId, stages, onSaved
           id: s.id,
           name: s.name,
           color: s.color || DEFAULT_STAGE_COLORS[0],
-          win_probability: Number(s.win_probability) || 0,
+          win_probability: s.win_probability,
         }));
       setDraft(current.length > 0 ? current : [{ name: "", color: DEFAULT_STAGE_COLORS[0], win_probability: 50 }]);
     }

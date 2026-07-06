@@ -100,7 +100,7 @@ export default function CompaniesScreen() {
         case "domain": cmp = (a.domain || "").localeCompare(b.domain || ""); break;
         case "industry": cmp = (a.industry || "").localeCompare(b.industry || ""); break;
         case "size": cmp = (a.size || "").localeCompare(b.size || ""); break;
-        case "revenue": cmp = (Number(a.revenue) || 0) - (Number(b.revenue) || 0); break;
+        case "revenue": cmp = (a.revenue ?? 0) - (b.revenue ?? 0); break;
         case "created_at": cmp = (a.created_at || "").localeCompare(b.created_at || ""); break;
       }
       return sortDir === "asc" ? cmp : -cmp;

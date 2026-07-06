@@ -233,7 +233,7 @@ export default function DealDetailScreen() {
               </>
             ) : (
               <span className="text-lg font-bold text-primary cursor-pointer hover:opacity-80 sm:text-xl" onClick={() => setEditingValue(true)}>
-                {formatCurrency(Number(deal.value) || 0, deal.currency || "BRL")}
+                {formatCurrency(deal.value, deal.currency || "BRL")}
               </span>
             )}
 

@@ -13,10 +13,19 @@ export type DealWithRelations = Deal & {
   company?: Company | null;
 };
 
-export const listDeals = () => db.table<Deal>("deals").list();
-export const createDeal = (input: DealInsert) => db.table<Deal>("deals").create(input);
-export const updateDeal = (id: string, patch: DealUpdate) =>
-  db.table<Deal>("deals").update(id, patch);
+// Postgres `numeric` columns (value, probability) can round-trip through the
+// gateway's JSON serialization as strings even though types.gen.ts declares
+// them as `number` — normalize once here instead of every call site doing
+// `Number(deal.value) || 0` (see Masia Clone-Template Audit Framework §7).
+function normalizeDeal(d: Deal): Deal {
+  return { ...d, value: Number(d.value) || 0, probability: Number(d.probability) || 0 };
+}
+
+export const listDeals = async () => (await db.table<Deal>("deals").list()).map(normalizeDeal);
+export const createDeal = async (input: DealInsert) =>
+  normalizeDeal(await db.table<Deal>("deals").create(input));
+export const updateDeal = async (id: string, patch: DealUpdate) =>
+  normalizeDeal(await db.table<Deal>("deals").update(id, patch));
 export const deleteDeal = (id: string) => db.table<Deal>("deals").remove(id);
 
 export const getDeal = async (id: string): Promise<Deal | null> =>

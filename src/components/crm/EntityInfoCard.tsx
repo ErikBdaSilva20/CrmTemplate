@@ -64,7 +64,7 @@ export function EntityInfoCard({ deal, activities }: EntityInfoCardProps) {
         <div className="flex items-center justify-between text-xs">
           <span className="flex items-center gap-1 font-semibold text-foreground">
             <DollarSign className="h-3 w-3 text-muted-foreground" />
-            {formatCurrency(Number(deal.value) || 0, deal.currency || "BRL")}
+            {formatCurrency(deal.value, deal.currency || "BRL")}
           </span>
           <span className="flex items-center gap-1 text-muted-foreground">
             <CalendarDays className="h-3 w-3" />

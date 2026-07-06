@@ -39,8 +39,8 @@ export function DealsList({
     let cmp = 0;
     switch (sortKey) {
       case "title": cmp = (a.title || "").localeCompare(b.title || ""); break;
-      case "value": cmp = (Number(a.value) || 0) - (Number(b.value) || 0); break;
-      case "probability": cmp = (Number(a.probability) || 0) - (Number(b.probability) || 0); break;
+      case "value": cmp = a.value - b.value; break;
+      case "probability": cmp = a.probability - b.probability; break;
       case "close_date": cmp = (a.close_date || "").localeCompare(b.close_date || ""); break;
       case "status": cmp = (a.status || "").localeCompare(b.status || ""); break;
       case "created_at": cmp = (a.created_at || "").localeCompare(b.created_at || ""); break;
@@ -121,7 +121,7 @@ export function DealsList({
                     </div>
                   </TableCell>
                   <TableCell className="font-semibold text-primary">
-                    {formatCurrency(Number(deal.value) || 0, deal.currency || "BRL")}
+                    {formatCurrency(deal.value, deal.currency || "BRL")}
                   </TableCell>
                   <TableCell className="text-muted-foreground hidden md:table-cell">{getStageName(deal.stage_id)}</TableCell>
                   <TableCell className="hidden lg:table-cell">

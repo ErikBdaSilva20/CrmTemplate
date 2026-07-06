@@ -82,7 +82,7 @@ export function computePreviousPeriodRevenue(deals: Deal[], period: PeriodFilter
         new Date(d.created_at) >= prevStart &&
         new Date(d.created_at) <= prevEnd,
     )
-    .reduce((sum, d) => sum + (Number(d.value) || 0), 0);
+    .reduce((sum, d) => sum + d.value, 0);
 }
 
 export interface MonthlyRevenuePoint {
@@ -103,7 +103,7 @@ export function computeMonthlyRevenue(deals: Deal[], now = new Date()): MonthlyR
     });
     points.push({
       month: MONTHS_PT[monthDate.getMonth()],
-      receita: wonInMonth.reduce((sum, deal) => sum + (Number(deal.value) || 0), 0),
+      receita: wonInMonth.reduce((sum, deal) => sum + deal.value, 0),
       tendencia: 0,
     });
   }
@@ -131,7 +131,7 @@ export function computeFunnel(stages: PipelineStage[], openDeals: Deal[]): Funne
         id: stage.id,
         name: stage.name,
         count: stageDeals.length,
-        value: stageDeals.reduce((sum, d) => sum + (Number(d.value) || 0), 0),
+        value: stageDeals.reduce((sum, d) => sum + d.value, 0),
         color: stage.color || "hsl(var(--primary))",
       };
     });
@@ -142,7 +142,7 @@ export function computeFunnel(stages: PipelineStage[], openDeals: Deal[]): Funne
 export function computeStageDeals(openDeals: Deal[], stageId: string): Deal[] {
   return openDeals
     .filter((d) => d.stage_id === stageId)
-    .sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0));
+    .sort((a, b) => b.value - a.value);
 }
 
 // Deals mais relevantes para o card de resumo do Dashboard: maior
@@ -153,7 +153,7 @@ export function selectTopDeals<T extends Deal>(openDeals: T[], limit = 4): T[] {
     .sort((a, b) => {
       const scoreDiff = (b.qualification_score || 0) - (a.qualification_score || 0);
       if (scoreDiff !== 0) return scoreDiff;
-      const valueDiff = (Number(b.value) || 0) - (Number(a.value) || 0);
+      const valueDiff = b.value - a.value;
       if (valueDiff !== 0) return valueDiff;
       if (!a.close_date && !b.close_date) return 0;
       if (!a.close_date) return 1;
@@ -201,7 +201,7 @@ export function dealPriority(
   const daysSinceActivity = Math.floor((now.getTime() - referenceDate.getTime()) / 86_400_000);
   if (daysSinceActivity > staleDays) reasons.push("stale");
 
-  const isHighValue = (Number(deal.value) || 0) >= highValueThreshold;
+  const isHighValue = deal.value >= highValueThreshold;
   const isLowBant = deal.qualification_score > 0 && deal.qualification_score < 50;
   if (isHighValue && isLowBant) reasons.push("risk");
 
@@ -229,11 +229,11 @@ export function computeAtRiskDeals(openDeals: Deal[], now = new Date()): AtRiskD
 
   const inactive = openDeals
     .filter((d) => (d.updated_at ? new Date(d.updated_at) < fourteenDaysAgo : true))
-    .sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+    .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 
   const closingSoon = openDeals
-    .filter((d) => d.close_date && monthsUntil(d.close_date, now) <= 0 && (Number(d.probability) || 0) < 50)
+    .filter((d) => d.close_date && monthsUntil(d.close_date, now) <= 0 && d.probability < 50)
     .sort((a, b) => new Date(a.close_date!).getTime() - new Date(b.close_date!).getTime());
 
   return { inactive, closingSoon };
@@ -305,7 +305,7 @@ export function computeGoalActual(
     if (!deal) return 0;
     switch (goal.goal_type) {
       case "revenue":
-        return deal.status === "won" ? Number(deal.value) || 0 : 0;
+        return deal.status === "won" ? deal.value : 0;
       case "deals_closed":
         return deal.status === "won" ? 1 : 0;
       case "activities":
@@ -326,7 +326,7 @@ export function computeGoalActual(
   switch (goal.goal_type) {
     case "revenue": {
       const won = scopedDeals.filter((d) => d.status === "won" && inRange(d.updated_at));
-      return won.reduce((sum, d) => sum + (Number(d.value) || 0), 0);
+      return won.reduce((sum, d) => sum + d.value, 0);
     }
     case "deals_closed":
       return scopedDeals.filter((d) => d.status === "won" && inRange(d.updated_at)).length;
