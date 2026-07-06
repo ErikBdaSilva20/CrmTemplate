@@ -20,7 +20,7 @@ import { useStages, usePipelines } from "@/hooks/usePipelines";
 import { useActivities } from "@/hooks/useActivities";
 import { useContacts } from "@/hooks/useContacts";
 import { useSalesGoals } from "@/hooks/useSalesGoals";
-import { formatCurrencyCompact as fmt } from "@/lib/format";
+import { formatCurrencyCompact as fmt, monthsUntil } from "@/lib/format";
 import { DEFAULT_MONTHLY_REVENUE_GOAL } from "@/lib/constants";
 import {
   computePercentage, getPeriodStart, isInPeriod, computeAverageSalesCycleDays,
@@ -480,13 +480,14 @@ export default function DashboardScreen() {
             {atRiskDeals.closingSoon.length > 0 ? (
               <div className="space-y-2">
                 {atRiskDeals.closingSoon.slice(0, 5).map((d) => {
-                  const daysLeft = d.close_date ? Math.ceil((new Date(d.close_date).getTime() - Date.now()) / 86400000) : 0;
+                  const monthsLeft = d.close_date ? monthsUntil(d.close_date) : 0;
+                  const closeLabel = monthsLeft < 0 ? "Vencido" : "Este mês";
                   return (
                     <div key={d.id} className="flex items-center justify-between rounded-md border border-warning/20 bg-warning/5 p-2 cursor-pointer hover:bg-warning/10 transition-colors" onClick={() => navigate(`/deals/${d.id}`)}>
                       <div className="min-w-0">
                         <p className="text-xs font-medium truncate">{d.title}</p>
                         <p className="text-[10px] text-muted-foreground">
-                          {daysLeft <= 0 ? "Vencido" : `${daysLeft} dias`} · {Number(d.probability) || 0}% prob
+                          {closeLabel} · {Number(d.probability) || 0}% prob
                         </p>
                       </div>
                       <span className="text-xs font-bold text-warning shrink-0">{fmt(Number(d.value) || 0)}</span>

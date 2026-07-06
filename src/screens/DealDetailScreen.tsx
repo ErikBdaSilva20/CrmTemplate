@@ -29,7 +29,7 @@ import { useCompanies } from "@/hooks/useCompanies";
 import { useLossReasons } from "@/hooks/useLossReasons";
 import { invalidateActivities } from "@/hooks/useActivities";
 import { ACTIVITY_TYPE, ACTIVITY_TYPES } from "@/lib/domain";
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateTime, formatMonthYear } from "@/lib/format";
 
 export default function DealDetailScreen() {
   const { id } = useParams<{ id: string }>();
@@ -358,7 +358,7 @@ export default function DealDetailScreen() {
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-muted-foreground"><Calendar className="h-3.5 w-3.5" />Fechamento</span>
-                <span>{formatDate(deal.close_date)}</span>
+                <span className="capitalize">{formatMonthYear(deal.close_date)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-muted-foreground"><Percent className="h-3.5 w-3.5" />Probabilidade</span>

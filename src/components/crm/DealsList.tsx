@@ -8,7 +8,7 @@ import {
 import { ArrowUpDown, Trophy, XCircle, Trash2, AlertTriangle } from "lucide-react";
 import type { DealWithRelations, PipelineStage } from "@/lib/data";
 import { DEAL_STATUS } from "@/lib/domain";
-import { formatCurrency, formatDate, daysUntil } from "@/lib/format";
+import { formatCurrency, formatMonthYear, monthsUntil } from "@/lib/format";
 
 type Stage = PipelineStage;
 
@@ -106,8 +106,8 @@ export function DealsList({
           </TableHeader>
           <TableBody>
             {sorted.map((deal) => {
-              const daysUntilClose = deal.close_date ? daysUntil(deal.close_date) : null;
-              const isUrgent = daysUntilClose !== null && daysUntilClose < 7 && daysUntilClose >= 0;
+              const monthsToClose = deal.close_date ? monthsUntil(deal.close_date) : null;
+              const isUrgent = monthsToClose !== null && monthsToClose <= 0;
 
               return (
                 <TableRow key={deal.id} className="cursor-pointer" onClick={() => onDealClick(deal)}>
@@ -131,9 +131,9 @@ export function DealsList({
                   </TableCell>
                   <TableCell className="hidden sm:table-cell">
                     {deal.close_date ? (
-                      <div className={`flex items-center gap-1 text-sm ${isUrgent ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                      <div className={`flex items-center gap-1 text-sm capitalize ${isUrgent ? "text-destructive font-medium" : "text-muted-foreground"}`}>
                         {isUrgent && <AlertTriangle className="h-3 w-3" />}
-                        {formatDate(deal.close_date)}
+                        {formatMonthYear(deal.close_date)}
                       </div>
                     ) : "—"}
                   </TableCell>

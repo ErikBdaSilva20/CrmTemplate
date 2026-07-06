@@ -5,6 +5,7 @@
 // JSX. Pulling them out here makes each calculation independently testable
 // and keeps the screen focused on layout.
 import { ACTIVITY_TYPE, CONTACT_STATUS } from "@/lib/domain";
+import { monthsUntil } from "@/lib/format";
 import type { Activity, Contact, Deal, PipelineStage } from "@/lib/data";
 
 export type PeriodFilter = "today" | "this_week" | "this_month" | "this_quarter" | "this_year" | "all";
@@ -140,10 +141,10 @@ export interface AtRiskDeals {
 }
 
 // Two risk signals: open deals untouched for 14+ days (ranked by value), and
-// open deals closing within a week with less than 50% probability.
+// open deals with a recurring closing month that's already due (this month or
+// overdue) with less than 50% probability.
 export function computeAtRiskDeals(openDeals: Deal[], now = new Date()): AtRiskDeals {
   const fourteenDaysAgo = new Date(now.getTime() - 14 * 86_400_000);
-  const sevenDaysFromNow = new Date(now.getTime() + 7 * 86_400_000);
 
   const inactive = openDeals
     .filter((d) => (d.updated_at ? new Date(d.updated_at) < fourteenDaysAgo : true))
@@ -151,11 +152,7 @@ export function computeAtRiskDeals(openDeals: Deal[], now = new Date()): AtRiskD
     .slice(0, 5);
 
   const closingSoon = openDeals
-    .filter((d) => {
-      if (!d.close_date) return false;
-      const closeDate = new Date(d.close_date);
-      return closeDate <= sevenDaysFromNow && (Number(d.probability) || 0) < 50;
-    })
+    .filter((d) => d.close_date && monthsUntil(d.close_date, now) <= 0 && (Number(d.probability) || 0) < 50)
     .sort((a, b) => new Date(a.close_date!).getTime() - new Date(b.close_date!).getTime());
 
   return { inactive, closingSoon };
