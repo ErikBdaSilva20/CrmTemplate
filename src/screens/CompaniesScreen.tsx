@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -13,11 +12,12 @@ import {
 } from "@/components/ui/select";
 import {
   Plus, LayoutGrid, List, Filter, ArrowUpDown, Upload, Download,
-  Trash2, ChevronLeft, ChevronRight, X, Building2,
+  Trash2, ChevronLeft, ChevronRight, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { CompanyDrawer } from "@/components/crm/CompanyDrawer";
 import { CompanyCreateModal } from "@/components/crm/CompanyCreateModal";
+import { CompanyLogo } from "@/components/crm/CompanyLogo";
 import { CSVImportModal } from "@/components/crm/CSVImportModal";
 import { COMPANY_SIZES } from "@/lib/constants";
 import { useCompanies } from "@/hooks/useCompanies";
@@ -238,20 +238,7 @@ export default function CompaniesScreen() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      {c.domain ? (
-                        <img
-                          src={`https://logo.clearbit.com/${c.domain}`}
-                          alt=""
-                          className="h-8 w-8 rounded-md bg-muted object-contain"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                        />
-                      ) : (
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                            <Building2 className="h-4 w-4" />
-                          </AvatarFallback>
-                        </Avatar>
-                      )}
+                      <CompanyLogo domain={c.domain} className="h-8 w-8 rounded-md" iconClassName="h-4 w-4" />
                       <span className="font-medium">{c.name}</span>
                     </div>
                   </TableCell>
@@ -278,11 +265,7 @@ export default function CompaniesScreen() {
             <Card key={c.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setDrawerCompanyId(c.id)}>
               <CardContent className="p-4 space-y-2">
                 <div className="flex items-center gap-3">
-                  {c.domain ? (
-                    <img src={`https://logo.clearbit.com/${c.domain}`} alt="" className="h-10 w-10 rounded-md bg-muted object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                  ) : (
-                    <Avatar className="h-10 w-10"><AvatarFallback className="bg-primary/10 text-primary"><Building2 className="h-5 w-5" /></AvatarFallback></Avatar>
-                  )}
+                  <CompanyLogo domain={c.domain} className="h-10 w-10 rounded-md" iconClassName="h-5 w-5" />
                   <div className="overflow-hidden">
                     <p className="font-medium truncate">{c.name}</p>
                     {c.industry && <p className="text-xs text-muted-foreground truncate">{c.industry}</p>}

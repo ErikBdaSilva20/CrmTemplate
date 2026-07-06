@@ -10,7 +10,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Edit2, X, Save, Building2, Globe, Users, DollarSign } from "lucide-react";
+import { Edit2, X, Save, Globe, Users, DollarSign } from "lucide-react";
+import { CompanyLogo } from "@/components/crm/CompanyLogo";
 import { toast } from "sonner";
 import { INDUSTRIES, COMPANY_SIZES } from "@/lib/constants";
 import { DEAL_STATUS } from "@/lib/domain";
@@ -76,11 +77,7 @@ export function CompanyDrawer({ company, onClose, onUpdate }: CompanyDrawerProps
         {/* Header */}
         <div className="border-b border-border p-6">
           <div className="flex items-start gap-4">
-            {company.domain ? (
-              <img src={`https://logo.clearbit.com/${company.domain}`} alt="" className="h-14 w-14 rounded-lg bg-muted object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-            ) : (
-              <Avatar className="h-14 w-14"><AvatarFallback className="bg-primary/10 text-primary text-lg"><Building2 className="h-6 w-6" /></AvatarFallback></Avatar>
-            )}
+            <CompanyLogo domain={company.domain} className="h-14 w-14" iconClassName="h-6 w-6" />
             <div className="flex-1">
               <h2 className="text-lg font-bold">{company.name}</h2>
               {company.industry && <p className="text-sm text-muted-foreground">{company.industry}</p>}

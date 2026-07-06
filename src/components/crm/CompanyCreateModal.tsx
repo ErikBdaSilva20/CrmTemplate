@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -6,7 +6,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -14,11 +13,12 @@ import {
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
-import { Building2, X, Search, Users, Check } from "lucide-react";
+import { X, Search, Users, Check } from "lucide-react";
 import { toast } from "sonner";
 import { INDUSTRIES, COMPANY_SIZES } from "@/lib/constants";
 import { useContacts, invalidateContacts } from "@/hooks/useContacts";
 import { createCompany, updateContact } from "@/lib/data";
+import { CompanyLogo } from "@/components/crm/CompanyLogo";
 
 interface CompanyCreateModalProps {
   open: boolean;
@@ -31,7 +31,6 @@ export function CompanyCreateModal({ open, onOpenChange, onCreated }: CompanyCre
     name: "", domain: "", industry: "", size: "", revenue: "",
     website: "", linkedin_url: "",
   });
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Contacts multi-select — reaproveita a cache compartilhada (§1.1).
@@ -43,14 +42,6 @@ export function CompanyCreateModal({ open, onOpenChange, onCreated }: CompanyCre
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
   const [contactSearch, setContactSearch] = useState("");
   const [contactsOpen, setContactsOpen] = useState(false);
-
-  useEffect(() => {
-    if (form.domain && form.domain.includes(".")) {
-      setLogoUrl(`https://logo.clearbit.com/${form.domain}`);
-    } else {
-      setLogoUrl(null);
-    }
-  }, [form.domain]);
 
   const filteredContacts = useMemo(() => {
     const q = contactSearch.toLowerCase();
@@ -121,11 +112,11 @@ export function CompanyCreateModal({ open, onOpenChange, onCreated }: CompanyCre
           <div className="space-y-4 mt-2">
             {/* Logo preview */}
             <div className="flex justify-center">
-              {logoUrl ? (
-                <img src={logoUrl} alt="" className="h-16 w-16 rounded-lg bg-muted object-contain" onError={() => setLogoUrl(null)} />
-              ) : (
-                <Avatar className="h-16 w-16"><AvatarFallback className="bg-primary/10 text-primary"><Building2 className="h-8 w-8" /></AvatarFallback></Avatar>
-              )}
+              <CompanyLogo
+                domain={form.domain && form.domain.includes(".") ? form.domain : null}
+                className="h-16 w-16"
+                iconClassName="h-8 w-8"
+              />
             </div>
 
             <div className="space-y-1">
