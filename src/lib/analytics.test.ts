@@ -3,8 +3,9 @@ import {
   computePercentage, getPeriodStart, computeFunnel, computeAtRiskDeals,
   computeMonthlyRevenue, computePreviousPeriodRevenue, computeAverageSalesCycleDays,
   computeStageDeals, selectTopDeals, dealPriority,
+  computeGoalActual, computeGoalPace, computeGoalProjection,
 } from "./analytics";
-import type { Activity, Deal, PipelineStage } from "./data";
+import type { Activity, Contact, Deal, PipelineStage, SalesGoal } from "./data";
 
 function makeActivity(overrides: Partial<Activity>): Activity {
   return {
@@ -18,6 +19,43 @@ function makeActivity(overrides: Partial<Activity>): Activity {
     company_id: null,
     due_date: null,
     completed_at: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function makeContact(overrides: Partial<Contact>): Contact {
+  return {
+    id: "contact-1",
+    owner_id: "owner-1",
+    company_id: null,
+    first_name: "Jane",
+    last_name: "Doe",
+    email: null,
+    phone: null,
+    title: null,
+    linkedin_url: null,
+    avatar_url: null,
+    status: "lead",
+    lead_score: 0,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function makeGoal(overrides: Partial<SalesGoal>): SalesGoal {
+  return {
+    id: "goal-1",
+    owner_id: "owner-1",
+    goal_type: "revenue",
+    target_value: 10_000,
+    current_value: 0,
+    period_month: 6,
+    period_year: 2026,
+    deal_id: null,
+    company_id: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     ...overrides,
@@ -279,5 +317,80 @@ describe("computeAverageSalesCycleDays", () => {
 
   it("returns 0 for an empty list", () => {
     expect(computeAverageSalesCycleDays([])).toBe(0);
+  });
+});
+
+describe("computeGoalActual", () => {
+  const month = 6;
+  const year = 2026;
+  const inPeriod = new Date(2026, 5, 10).toISOString();
+  const outOfPeriod = new Date(2026, 4, 10).toISOString();
+
+  it("global revenue goal sums won deals in period regardless of company", () => {
+    const goal = makeGoal({ goal_type: "revenue" });
+    const deals = [
+      makeDeal({ id: "d1", status: "won", value: 100, updated_at: inPeriod }),
+      makeDeal({ id: "d2", status: "won", value: 200, updated_at: outOfPeriod }),
+      makeDeal({ id: "d3", status: "open", value: 999, updated_at: inPeriod }),
+    ];
+    expect(computeGoalActual(goal, deals, [], [], month, year)).toBe(100);
+  });
+
+  it("company-scoped revenue goal only counts that company's won deals", () => {
+    const goal = makeGoal({ goal_type: "revenue", company_id: "co-1" });
+    const deals = [
+      makeDeal({ id: "d1", company_id: "co-1", status: "won", value: 100, updated_at: inPeriod }),
+      makeDeal({ id: "d2", company_id: "co-2", status: "won", value: 500, updated_at: inPeriod }),
+    ];
+    expect(computeGoalActual(goal, deals, [], [], month, year)).toBe(100);
+  });
+
+  it("deal-scoped revenue goal measures just that deal (won only)", () => {
+    const wonDeal = makeGoal({ goal_type: "revenue", deal_id: "d1" });
+    const deals = [makeDeal({ id: "d1", status: "won", value: 750 })];
+    expect(computeGoalActual(wonDeal, deals, [], [], month, year)).toBe(750);
+
+    const openDeal = makeDeal({ id: "d1", status: "open", value: 750 });
+    expect(computeGoalActual(wonDeal, [openDeal], [], [], month, year)).toBe(0);
+  });
+
+  it("company-scoped new_contacts goal counts contacts created in period for that company", () => {
+    const goal = makeGoal({ goal_type: "new_contacts", company_id: "co-1" });
+    const contacts = [
+      makeContact({ id: "c1", company_id: "co-1", created_at: inPeriod }),
+      makeContact({ id: "c2", company_id: "co-2", created_at: inPeriod }),
+      makeContact({ id: "c3", company_id: "co-1", created_at: outOfPeriod }),
+    ];
+    expect(computeGoalActual(goal, [], [], contacts, month, year)).toBe(1);
+  });
+});
+
+describe("computeGoalPace", () => {
+  it("returns 'achieved' once percent reaches 100, regardless of elapsed time", () => {
+    expect(computeGoalPace(100, 6, 2026, new Date(2026, 5, 1))).toBe("achieved");
+  });
+
+  it("returns 'on_track' when progress keeps up with elapsed period", () => {
+    // June has 30 days; day 15 is 50% elapsed.
+    const now = new Date(2026, 5, 16);
+    expect(computeGoalPace(60, 6, 2026, now)).toBe("on_track");
+  });
+
+  it("returns 'behind' when progress lags the elapsed period", () => {
+    const now = new Date(2026, 5, 16);
+    expect(computeGoalPace(10, 6, 2026, now)).toBe("behind");
+  });
+});
+
+describe("computeGoalProjection", () => {
+  it("projects linearly based on elapsed fraction of the period", () => {
+    // Exactly half of June elapsed -> double the current value.
+    const now = new Date(2026, 5, 16);
+    expect(computeGoalProjection(500, 6, 2026, now)).toBeCloseTo(1000, -1);
+  });
+
+  it("returns the current value when no time has elapsed", () => {
+    const now = new Date(2026, 5, 1);
+    expect(computeGoalProjection(500, 6, 2026, now)).toBe(500);
   });
 });

@@ -231,6 +231,12 @@ drop trigger if exists trg_sales_goals_touch on sales_goals;
 create trigger trg_sales_goals_touch before update on sales_goals
   for each row execute function touch_updated_at();
 
+-- OKR: meta opcionalmente atrelada a um deal ou empresa (fix.md §6). Aditiva
+-- e idempotente — segura tanto numa tabela recém-criada quanto num ambiente
+-- que já rodou a migration antes desta coluna existir.
+alter table sales_goals add column if not exists deal_id uuid references deals(id) on delete set null;
+alter table sales_goals add column if not exists company_id uuid references companies(id) on delete set null;
+
 -- Feature "Filtros Salvos" removida (fix.md §7). A tabela `segments` não faz
 -- mais parte do estado desejado. Ambientes já provisionados com a tabela
 -- antiga devem rodar manualmente:

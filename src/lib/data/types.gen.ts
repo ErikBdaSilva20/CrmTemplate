@@ -298,6 +298,8 @@ export interface Database {
           current_value: number;
           period_month: number;
           period_year: number;
+          deal_id: string | null;
+          company_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -309,6 +311,8 @@ export interface Database {
           current_value?: number;
           period_month: number;
           period_year: number;
+          deal_id?: string | null;
+          company_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };

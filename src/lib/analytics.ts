@@ -6,7 +6,7 @@
 // and keeps the screen focused on layout.
 import { ACTIVITY_TYPE, CONTACT_STATUS } from "@/lib/domain";
 import { monthsUntil } from "@/lib/format";
-import type { Activity, Contact, Deal, PipelineStage } from "@/lib/data";
+import type { Activity, Contact, Deal, PipelineStage, SalesGoal } from "@/lib/data";
 
 export type PeriodFilter = "today" | "this_week" | "this_month" | "this_quarter" | "this_year" | "all";
 
@@ -279,4 +279,97 @@ export function computeNewLeadsByStatus(contacts: Contact[], periodStart: Date |
     name: CONTACT_STATUS[status as Contact["status"]].label,
     value: count ?? 0,
   }));
+}
+
+// ── Sales Goals (OKR) ────────────────────────────────────────────────────
+
+function goalPeriodRange(month: number, year: number): { start: Date; end: Date } {
+  return { start: new Date(year, month - 1, 1), end: new Date(year, month, 1) };
+}
+
+// Realizado de uma meta, escopado pelo vínculo (deal_id/company_id) quando
+// houver — sem vínculo, mantém o cálculo global por período/owner.
+export function computeGoalActual(
+  goal: Pick<SalesGoal, "goal_type" | "deal_id" | "company_id">,
+  deals: Deal[],
+  activities: Activity[],
+  contacts: Contact[],
+  month: number,
+  year: number,
+): number {
+  const { start, end } = goalPeriodRange(month, year);
+  const inRange = (s: string | null) => s !== null && new Date(s) >= start && new Date(s) < end;
+
+  if (goal.deal_id) {
+    const deal = deals.find((d) => d.id === goal.deal_id);
+    if (!deal) return 0;
+    switch (goal.goal_type) {
+      case "revenue":
+        return deal.status === "won" ? Number(deal.value) || 0 : 0;
+      case "deals_closed":
+        return deal.status === "won" ? 1 : 0;
+      case "activities":
+        return activities.filter((a) => a.deal_id === goal.deal_id && inRange(a.created_at)).length;
+      default:
+        return 0;
+    }
+  }
+
+  const scopedDeals = goal.company_id ? deals.filter((d) => d.company_id === goal.company_id) : deals;
+  const scopedActivities = goal.company_id
+    ? activities.filter((a) => a.company_id === goal.company_id)
+    : activities;
+  const scopedContacts = goal.company_id
+    ? contacts.filter((c) => c.company_id === goal.company_id)
+    : contacts;
+
+  switch (goal.goal_type) {
+    case "revenue": {
+      const won = scopedDeals.filter((d) => d.status === "won" && inRange(d.updated_at));
+      return won.reduce((sum, d) => sum + (Number(d.value) || 0), 0);
+    }
+    case "deals_closed":
+      return scopedDeals.filter((d) => d.status === "won" && inRange(d.updated_at)).length;
+    case "activities":
+      return scopedActivities.filter((a) => inRange(a.created_at)).length;
+    case "new_contacts":
+      return scopedContacts.filter((c) => inRange(c.created_at)).length;
+    default:
+      return 0;
+  }
+}
+
+export type GoalPaceStatus = "achieved" | "on_track" | "behind";
+
+// Compara % de progresso com a fração do período já decorrida — "atingida"
+// vence os demais, senão "no ritmo" se o progresso acompanha o tempo já
+// passado no mês, "atrás" caso contrário.
+export function computeGoalPace(
+  percent: number,
+  month: number,
+  year: number,
+  now = new Date(),
+): GoalPaceStatus {
+  if (percent >= 100) return "achieved";
+  const { start, end } = goalPeriodRange(month, year);
+  const totalMs = end.getTime() - start.getTime();
+  const elapsedMs = Math.min(Math.max(now.getTime() - start.getTime(), 0), totalMs);
+  const elapsedFraction = totalMs > 0 ? elapsedMs / totalMs : 1;
+  return percent / 100 >= elapsedFraction ? "on_track" : "behind";
+}
+
+// Projeção linear: se o ritmo atual se mantiver, quanto será realizado ao
+// final do período.
+export function computeGoalProjection(
+  current: number,
+  month: number,
+  year: number,
+  now = new Date(),
+): number {
+  const { start, end } = goalPeriodRange(month, year);
+  const totalMs = end.getTime() - start.getTime();
+  const elapsedMs = Math.min(Math.max(now.getTime() - start.getTime(), 0), totalMs);
+  const elapsedFraction = totalMs > 0 ? elapsedMs / totalMs : 1;
+  if (elapsedFraction <= 0) return current;
+  return current / elapsedFraction;
 }
