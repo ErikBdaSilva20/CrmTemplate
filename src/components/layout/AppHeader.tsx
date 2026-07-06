@@ -16,6 +16,7 @@ import {
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Building2, ClipboardList, Handshake, Plus, Users } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { SystemRequirementsWidget } from './SystemRequirementsWidget';
 
 const routeLabels: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -73,6 +74,7 @@ export function AppHeader() {
       </span>
 
       <div className="flex items-center gap-1.5 sm:gap-2">
+        <SystemRequirementsWidget />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button

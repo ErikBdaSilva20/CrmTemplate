@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { INDUSTRIES, DEFAULT_STAGES } from "@/lib/constants";
 import { invalidatePipelines, invalidateStages } from "@/hooks/usePipelines";
 import { invalidateCompanies } from "@/hooks/useCompanies";
-import { createCompany, createPipeline, createStage } from "@/lib/data";
+import { createCompany, createDefaultPipeline } from "@/lib/data";
 
 // Setup reduzido aos steps de DADOS (Importantdoc §6 / docs/10 §2.3): empresa-semente +
 // pipeline com estágios. Os steps de AI/Resend/Slack/Email saíram (backend/Composio).
@@ -42,13 +42,7 @@ export default function SetupScreen() {
         });
         invalidateCompanies();
       }
-      const pipeline = await createPipeline({ name: pipelineName.trim() || "Pipeline de Vendas", is_default: true });
-      if (pipeline?.id) {
-        for (let i = 0; i < DEFAULT_STAGES.length; i++) {
-          const s = DEFAULT_STAGES[i];
-          await createStage({ pipeline_id: pipeline.id, name: s.name, color: s.color, win_probability: s.win_probability, sort_order: i });
-        }
-      }
+      await createDefaultPipeline(pipelineName.trim() || "Pipeline de Vendas");
       invalidatePipelines();
       invalidateStages();
       toast.success("Tudo pronto!");

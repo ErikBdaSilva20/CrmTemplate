@@ -21,10 +21,9 @@ import { useContacts } from "@/hooks/useContacts";
 import { useCompanies } from "@/hooks/useCompanies";
 import { useLossReasons } from "@/hooks/useLossReasons";
 import { useActivities } from "@/hooks/useActivities";
-import { DEFAULT_STAGES } from "@/lib/constants";
 import {
   createDeal, updateDeal, deleteDeal, moveDealToStage, markDealWon, markDealLost,
-  createPipeline, createStage, enrichDeals, type Deal,
+  createDefaultPipeline, enrichDeals, type Deal,
 } from "@/lib/data";
 
 type ViewMode = "kanban" | "list";
@@ -91,13 +90,7 @@ export default function DealsScreen() {
     if (!firstPipelineName.trim()) return;
     setCreatingFirstPipeline(true);
     try {
-      const pipeline = await createPipeline({ name: firstPipelineName.trim(), is_default: true });
-      if (pipeline?.id) {
-        for (let i = 0; i < DEFAULT_STAGES.length; i++) {
-          const s = DEFAULT_STAGES[i];
-          await createStage({ pipeline_id: pipeline.id, name: s.name, color: s.color, win_probability: s.win_probability, sort_order: i });
-        }
-      }
+      await createDefaultPipeline(firstPipelineName.trim());
       invalidatePipelines();
       invalidateStages();
       refreshStages();
