@@ -42,6 +42,7 @@ import {
   X,
   AlertTriangle,
   Columns3,
+  Search,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
@@ -80,6 +81,7 @@ export default function ContactsScreen() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [page, setPage] = useState(0);
   const [filters, setFilters] = useState<ContactFilters>({});
+  const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
 
@@ -146,14 +148,24 @@ export default function ContactsScreen() {
   };
 
   const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
     return sortedContacts.filter((c) => {
       if (filters.status && filters.status !== 'all' && c.status !== filters.status) return false;
       if (filters.companyId && c.company_id !== filters.companyId) return false;
-      if (filters.createdFrom && c.created_at && c.created_at < filters.createdFrom) return false;
-      if (filters.createdTo && c.created_at && c.created_at > filters.createdTo) return false;
+      // Compara só a data (YYYY-MM-DD): created_at é timestamp completo, e o
+      // <Input type="date"> manda só a data — comparar as strings inteiras
+      // fazia um contato criado no próprio dia do "até" ser excluído (a
+      // timestamp completa é lexicograficamente "maior" que a data sozinha).
+      const createdDate = c.created_at ? c.created_at.slice(0, 10) : null;
+      if (filters.createdFrom && createdDate && createdDate < filters.createdFrom) return false;
+      if (filters.createdTo && createdDate && createdDate > filters.createdTo) return false;
+      if (term) {
+        const haystack = `${c.first_name} ${c.last_name || ''} ${c.email || ''} ${c.phone || ''}`.toLowerCase();
+        if (!haystack.includes(term)) return false;
+      }
       return true;
     });
-  }, [sortedContacts, filters]);
+  }, [sortedContacts, filters, search]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -251,6 +263,26 @@ export default function ContactsScreen() {
           <p className="text-xs sm:text-sm text-muted-foreground">{filtered.length} contatos</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-56">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar nome, email ou telefone"
+              className="h-8 pl-7 pr-7 text-xs"
+              aria-label="Buscar contatos"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Limpar busca"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
           <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
             <button
               onClick={() => setViewMode('table')}
