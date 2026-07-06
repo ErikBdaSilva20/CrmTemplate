@@ -7,10 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Kanban, List, Plus, Filter, Settings2, Bookmark, X } from "lucide-react";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Kanban, List, Plus, Filter, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { DealsKanban } from "@/components/crm/DealsKanban";
 import { DealsList } from "@/components/crm/DealsList";
@@ -22,11 +19,10 @@ import { useDeals } from "@/hooks/useDeals";
 import { useStages, usePipelines } from "@/hooks/usePipelines";
 import { useContacts } from "@/hooks/useContacts";
 import { useCompanies } from "@/hooks/useCompanies";
-import { useSegments } from "@/hooks/useSegments";
 import { useLossReasons } from "@/hooks/useLossReasons";
 import {
   createDeal, updateDeal, deleteDeal, moveDealToStage, markDealWon, markDealLost,
-  enrichDeals, type Deal, type Segment,
+  enrichDeals, type Deal,
 } from "@/lib/data";
 
 type ViewMode = "kanban" | "list";
@@ -46,7 +42,6 @@ export default function DealsScreen() {
   const { data: pipelines } = usePipelines();
   const { data: contacts } = useContacts();
   const { data: companies } = useCompanies();
-  const { data: allSegments } = useSegments();
   const { data: lossReasons } = useLossReasons();
 
   // Cache compartilhada (useDeals) + cruzamento local no front (enrichDeals),
@@ -56,11 +51,6 @@ export default function DealsScreen() {
   useEffect(() => {
     setDeals(enrichDeals(dealsRaw, contacts, companies));
   }, [dealsRaw, contacts, companies]);
-
-  const segments = useMemo(
-    () => allSegments.filter((s) => (s.filters as Record<string, unknown>)?.entity === "deals"),
-    [allSegments],
-  );
 
   const [selectedPipeline, setSelectedPipeline] = useState<string>("");
   useEffect(() => {
@@ -79,7 +69,6 @@ export default function DealsScreen() {
   const [form, setForm] = useState<Partial<Deal>>({});
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<DealFilters>({});
-  const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
 
   const [lossModalOpen, setLossModalOpen] = useState(false);
   const [lossDealId, setLossDealId] = useState<string | null>(null);
@@ -88,20 +77,6 @@ export default function DealsScreen() {
 
   const [selectedDeals, setSelectedDeals] = useState<Set<string>>(new Set());
   const [pipelineDialogOpen, setPipelineDialogOpen] = useState(false);
-
-  const applySegment = (seg: Segment) => {
-    const f = seg.filters as Record<string, unknown>;
-    setFilters({
-      minValue: f?.min_value != null ? Number(f.min_value) : undefined,
-      maxValue: f?.max_value != null ? Number(f.max_value) : undefined,
-    });
-    setActiveSegmentId(seg.id);
-  };
-
-  const clearSegment = () => {
-    setActiveSegmentId(null);
-    setFilters({});
-  };
 
   const pipelineStages = useMemo(
     () => stages.filter((s) => s.pipeline_id === selectedPipeline).sort((a, b) => a.sort_order - b.sort_order),
@@ -260,28 +235,6 @@ export default function DealsScreen() {
           <Button variant="outline" size="sm" className="h-8" onClick={() => setShowFilters(!showFilters)} aria-label="Alternar filtros">
             <Filter className="mr-1 h-3 w-3" /><span className="hidden sm:inline">Filtro</span>
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant={activeSegmentId ? "secondary" : "outline"} size="sm" className="h-8" aria-label="Filtros salvos">
-                <Bookmark className="mr-1 h-3 w-3" />
-                <span className="hidden sm:inline">
-                  {activeSegmentId ? (segments.find((s) => s.id === activeSegmentId)?.name ?? "Segmentos") : "Segmentos"}
-                </span>
-                {activeSegmentId && (
-                  <X className="ml-1 h-3 w-3 hover:text-destructive" onClick={(e) => { e.stopPropagation(); clearSegment(); }} />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              {segments.length === 0 ? (
-                <DropdownMenuItem disabled className="text-xs text-muted-foreground">Nenhum filtro salvo</DropdownMenuItem>
-              ) : segments.map((s) => (
-                <DropdownMenuItem key={s.id} onClick={() => applySegment(s)} className={`text-xs ${activeSegmentId === s.id ? "font-medium" : ""}`}>
-                  {s.name}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
 

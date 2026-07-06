@@ -28,7 +28,7 @@ const pool = new Pool({
 // TABLES_WITH_OWNER da migration (supabase/migrations/0001_business_schema.sql §B4.1).
 const TABLES_WITH_OWNER = new Set([
   "companies", "contacts", "deals", "activities",
-  "contact_tags", "deal_tags", "sales_goals", "segments",
+  "contact_tags", "deal_tags", "sales_goals",
 ]);
 
 // Lookups com ordenação natural.

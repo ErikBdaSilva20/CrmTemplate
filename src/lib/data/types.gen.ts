@@ -315,28 +315,6 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["sales_goals"]["Insert"]>;
       };
 
-      segments: {
-        Row: {
-          id: string;
-          owner_id: string;
-          name: string;
-          description: string | null;
-          filters: Json;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          owner_id?: string;
-          name: string;
-          description?: string | null;
-          filters?: Json;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["segments"]["Insert"]>;
-      };
-
     };
     Enums: {
       contact_status: ContactStatus;

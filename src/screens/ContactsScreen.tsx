@@ -42,7 +42,6 @@ import {
   X,
   AlertTriangle,
   Columns3,
-  Bookmark,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
@@ -53,9 +52,8 @@ import { CSVImportModal } from '@/components/crm/CSVImportModal';
 import { useContacts } from '@/hooks/useContacts';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useActivities } from '@/hooks/useActivities';
-import { useSegments } from '@/hooks/useSegments';
 import { CONTACT_STATUS, CONTACT_STATUSES } from '@/lib/domain';
-import { updateContact, deleteContact, type ContactStatus, type Segment } from '@/lib/data';
+import { updateContact, deleteContact, type ContactStatus } from '@/lib/data';
 import { formatDate } from '@/lib/format';
 
 type SortKey = 'name' | 'email' | 'status' | 'created_at' | 'title';
@@ -75,7 +73,6 @@ export default function ContactsScreen() {
   const { data: contactsRaw, refresh: refreshContacts } = useContacts();
   const { data: companies } = useCompanies();
   const { data: activities } = useActivities();
-  const { data: allSegments } = useSegments();
 
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
@@ -92,7 +89,6 @@ export default function ContactsScreen() {
   const [createOpen, setCreateOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
 
   useEffect(() => {
     if (searchParams.get('action') === 'new') {
@@ -118,15 +114,6 @@ export default function ContactsScreen() {
   const drawerContact = useMemo(
     () => (drawerContactId ? contacts.find((c) => c.id === drawerContactId) ?? null : null),
     [contacts, drawerContactId],
-  );
-
-  const segments = useMemo(
-    () =>
-      allSegments.filter((s) => {
-        const entity = (s.filters as Record<string, unknown>)?.entity;
-        return !entity || entity === 'contacts';
-      }),
-    [allSegments],
   );
 
   const lastActivityMap = useMemo(() => {
@@ -260,17 +247,6 @@ export default function ContactsScreen() {
     toast.success('CSV exportado');
   };
 
-  const applySegment = (seg: Segment) => {
-    const f = seg.filters as Record<string, unknown>;
-    setFilters({ status: f?.status && f.status !== 'any' ? String(f.status) : undefined });
-    setActiveSegmentId(seg.id);
-  };
-
-  const clearSegment = () => {
-    setActiveSegmentId(null);
-    setFilters({});
-  };
-
   const SortHeader = ({ label, field }: { label: string; field: SortKey }) => (
     <button
       onClick={() => toggleSort(field)}
@@ -325,48 +301,6 @@ export default function ContactsScreen() {
             <Filter className="mr-1 h-3.5 w-3.5" />
             <span className="hidden sm:inline">Filtros</span>
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant={activeSegmentId ? 'secondary' : 'outline'}
-                size="sm"
-                aria-label="Filtros salvos"
-              >
-                <Bookmark className="mr-1 h-3.5 w-3.5" />
-                <span className="hidden sm:inline">
-                  {activeSegmentId
-                    ? (segments.find((s) => s.id === activeSegmentId)?.name ?? 'Segmentos')
-                    : 'Segmentos'}
-                </span>
-                {activeSegmentId && (
-                  <X
-                    className="ml-1 h-3 w-3 hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      clearSegment();
-                    }}
-                  />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              {segments.length === 0 ? (
-                <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-                  Nenhum filtro salvo
-                </DropdownMenuItem>
-              ) : (
-                segments.map((s) => (
-                  <DropdownMenuItem
-                    key={s.id}
-                    onClick={() => applySegment(s)}
-                    className={`text-xs ${activeSegmentId === s.id ? 'font-medium' : ''}`}
-                  >
-                    {s.name}
-                  </DropdownMenuItem>
-                ))
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
           <Button
             variant="outline"
             size="sm"

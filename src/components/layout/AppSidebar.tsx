@@ -17,11 +17,9 @@ import {
   Activity,
   Building2,
   CheckSquare,
-  Filter,
   Handshake,
   LayoutDashboard,
   LogOut,
-  Settings,
   Target,
   Users,
 } from 'lucide-react';
@@ -38,10 +36,7 @@ const generalItems = [
 
 const analyticsItems = [
   { title: 'Metas', url: '/sales-goals', icon: Target },
-  { title: 'Filtros Salvos', url: '/segments', icon: Filter },
 ];
-
-const adminItems = [{ title: 'Configurações', url: '/settings', icon: Settings }];
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -93,7 +88,6 @@ export function AppSidebar() {
       <SidebarContent>
         {renderNavGroup(generalItems, 'Geral')}
         {renderNavGroup(analyticsItems, 'Analytics')}
-        {renderNavGroup(adminItems, 'Admin')}
       </SidebarContent>
       <SidebarFooter className="border-t border-border p-3">
         <div className="flex items-center gap-3">

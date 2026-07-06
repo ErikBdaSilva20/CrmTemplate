@@ -25,8 +25,6 @@ const routeLabels: Record<string, string> = {
   '/activities': 'Atividades',
   '/tasks': 'Tarefas',
   '/sales-goals': 'Metas',
-  '/segments': 'Filtros Salvos',
-  '/settings': 'Configurações',
 };
 
 export function AppHeader() {

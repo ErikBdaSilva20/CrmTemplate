@@ -231,18 +231,8 @@ drop trigger if exists trg_sales_goals_touch on sales_goals;
 create trigger trg_sales_goals_touch before update on sales_goals
   for each row execute function touch_updated_at();
 
--- Filtros salvos por usuário (era created_by → owner_id).
-create table if not exists segments (
-  id          uuid primary key default gen_random_uuid(),
-  owner_id    text not null references "user"(id) on delete cascade,
-  name        text not null,
-  description text,
-  filters     jsonb not null default '{}'::jsonb,
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
-);
-create index if not exists idx_segments_owner on segments(owner_id);
-drop trigger if exists trg_segments_touch on segments;
-create trigger trg_segments_touch before update on segments
-  for each row execute function touch_updated_at();
+-- Feature "Filtros Salvos" removida (fix.md §7). A tabela `segments` não faz
+-- mais parte do estado desejado. Ambientes já provisionados com a tabela
+-- antiga devem rodar manualmente:
+--   drop table if exists segments cascade;
 

@@ -15,8 +15,6 @@ const DealDetailScreen = lazy(() => import("@/screens/DealDetailScreen"));
 const ActivitiesScreen = lazy(() => import("@/screens/ActivitiesScreen"));
 const TasksScreen = lazy(() => import("@/screens/TasksScreen"));
 const SalesGoalsScreen = lazy(() => import("@/screens/SalesGoalsScreen"));
-const SegmentsScreen = lazy(() => import("@/screens/SegmentsScreen"));
-const SettingsScreen = lazy(() => import("@/screens/SettingsScreen"));
 const NotFoundScreen = lazy(() => import("@/screens/NotFoundScreen"));
 
 function RouteLoader() {
@@ -64,8 +62,6 @@ export default function App() {
               <Route path="/activities" element={<SuspenseRoute><ActivitiesScreen /></SuspenseRoute>} />
               <Route path="/tasks" element={<SuspenseRoute><TasksScreen /></SuspenseRoute>} />
               <Route path="/sales-goals" element={<SuspenseRoute><SalesGoalsScreen /></SuspenseRoute>} />
-              <Route path="/segments" element={<SuspenseRoute><SegmentsScreen /></SuspenseRoute>} />
-              <Route path="/settings" element={<SuspenseRoute><SettingsScreen /></SuspenseRoute>} />
             </Route>
 
             <Route path="*" element={<SuspenseRoute><NotFoundScreen /></SuspenseRoute>} />

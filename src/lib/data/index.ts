@@ -14,5 +14,4 @@ export * from "./pipelines.repo";
 export * from "./tags.repo";
 export * from "./lookups.repo";
 export * from "./salesGoals.repo";
-export * from "./segments.repo";
 

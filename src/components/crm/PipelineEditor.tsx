@@ -9,12 +9,8 @@ import { toast } from "sonner";
 import { createStage, updateStage, deleteStage, type PipelineStage } from "@/lib/data";
 import { DEFAULT_STAGE_COLORS } from "@/lib/constants";
 
-// Single stage editor consumed by both SettingsScreen (Pipelines tab) and
-// DealsScreen ("Personalizar pipeline"). Before this there were two
-// divergent implementations of the same feature (AUDITORIA-CODIGO.md §3.2):
-// Settings mutated each stage immediately (add/remove/reorder), DealsScreen
-// edited a local draft and saved everything at once. This component keeps
-// the draft-then-save-all behavior, since it lets an admin reorder/rename
+// Stage editor consumed by DealsScreen ("Personalizar pipeline"). Edits a
+// local draft and saves everything at once, letting an admin reorder/rename
 // several stages before committing any writes.
 interface StageDraft {
   id?: string;
