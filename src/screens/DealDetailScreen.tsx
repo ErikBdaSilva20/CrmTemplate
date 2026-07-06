@@ -15,11 +15,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  ArrowLeft, Trophy, XCircle, Building2, User, Calendar, Percent, Edit2, Check, X,
+  ArrowLeft, Trophy, XCircle, Building2, User, Calendar, Percent, Edit2, Check, X, RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  updateDeal, listActivitiesByDeal, createActivity,
+  updateDeal, markDealWon, listActivitiesByDeal, createActivity,
   type Activity, type ActivityType,
 } from "@/lib/data";
 import { useDeals } from "@/hooks/useDeals";
@@ -126,8 +126,8 @@ export default function DealDetailScreen() {
   };
 
   const markAsWon = async () => {
-    await updateDeal(deal.id, { status: "won" });
-    setDeal({ ...deal, status: "won" });
+    await markDealWon(deal.id);
+    setDeal({ ...deal, status: "won", loss_reason: null });
     refreshDeals();
     toast.success("Negócio marcado como ganho! 🎉");
   };
@@ -139,6 +139,19 @@ export default function DealDetailScreen() {
     setLossModalOpen(false);
     refreshDeals();
     toast.success("Negócio marcado como perdido");
+  };
+
+  const openLossModal = () => {
+    setLossReason("");
+    setLossNote("");
+    setLossModalOpen(true);
+  };
+
+  const reopenDeal = async () => {
+    await updateDeal(deal.id, { status: "open" });
+    setDeal({ ...deal, status: "open" });
+    refreshDeals();
+    toast.success("Negócio reaberto");
   };
 
   // owner_id setado pelo gateway — não enviar.
@@ -224,16 +237,23 @@ export default function DealDetailScreen() {
           </div>
         </div>
 
-        {deal.status === "open" && (
-          <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 gap-2">
+          {deal.status !== "won" && (
             <Button variant="outline" onClick={markAsWon} className="flex-1 text-success border-success/30 hover:bg-success/10 sm:flex-none">
               <Trophy className="mr-2 h-4 w-4" />Ganho
             </Button>
-            <Button variant="outline" onClick={() => setLossModalOpen(true)} className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10 sm:flex-none">
+          )}
+          {deal.status !== "lost" && (
+            <Button variant="outline" onClick={openLossModal} className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10 sm:flex-none">
               <XCircle className="mr-2 h-4 w-4" />Perdido
             </Button>
-          </div>
-        )}
+          )}
+          {deal.status !== "open" && (
+            <Button variant="outline" onClick={reopenDeal} className="flex-1 text-muted-foreground border-border hover:bg-muted sm:flex-none">
+              <RotateCcw className="mr-2 h-4 w-4" />Reabrir
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Pipeline progress bar */}
@@ -368,7 +388,7 @@ export default function DealDetailScreen() {
                 <span className="text-muted-foreground">Criado em</span>
                 <span>{formatDate(deal.created_at)}</span>
               </div>
-              {deal.loss_reason && (
+              {deal.status === "lost" && deal.loss_reason && (
                 <div className="mt-2 rounded-md bg-destructive/10 p-2">
                   <p className="text-xs font-medium text-destructive">Motivo da perda:</p>
                   <p className="text-xs text-destructive/80">{deal.loss_reason}</p>

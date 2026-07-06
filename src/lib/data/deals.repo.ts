@@ -26,7 +26,7 @@ export const getDeal = async (id: string): Promise<Deal | null> =>
 export const moveDealToStage = (id: string, stageId: string) =>
   updateDeal(id, { stage_id: stageId });
 
-export const markDealWon = (id: string) => updateDeal(id, { status: "won" });
+export const markDealWon = (id: string) => updateDeal(id, { status: "won", loss_reason: null });
 export const markDealLost = (id: string, lossReason: string) =>
   updateDeal(id, { status: "lost", loss_reason: lossReason });
 
