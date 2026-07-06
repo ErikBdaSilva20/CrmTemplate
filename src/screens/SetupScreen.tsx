@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { Building2, KanbanSquare, Check, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
-import { INDUSTRIES, DEFAULT_STAGE_COLORS } from "@/lib/constants";
+import { INDUSTRIES, DEFAULT_STAGES } from "@/lib/constants";
 import { invalidatePipelines, invalidateStages } from "@/hooks/usePipelines";
 import { invalidateCompanies } from "@/hooks/useCompanies";
 import { createCompany, createPipeline, createStage } from "@/lib/data";
@@ -17,14 +17,6 @@ import { createCompany, createPipeline, createStage } from "@/lib/data";
 // Setup reduzido aos steps de DADOS (Importantdoc §6 / docs/10 §2.3): empresa-semente +
 // pipeline com estágios. Os steps de AI/Resend/Slack/Email saíram (backend/Composio).
 // owner_id é setado pelo gateway — não enviamos.
-
-const DEFAULT_STAGES = [
-  { name: "Lead", color: DEFAULT_STAGE_COLORS[0], win_probability: 10 },
-  { name: "Qualificado", color: DEFAULT_STAGE_COLORS[1], win_probability: 25 },
-  { name: "Proposta", color: DEFAULT_STAGE_COLORS[2], win_probability: 50 },
-  { name: "Negociação", color: DEFAULT_STAGE_COLORS[3], win_probability: 75 },
-  { name: "Fechado", color: DEFAULT_STAGE_COLORS[4], win_probability: 100 },
-];
 
 export default function SetupScreen() {
   const navigate = useNavigate();
@@ -110,7 +102,7 @@ export default function SetupScreen() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg"><KanbanSquare className="h-5 w-5 text-primary" />Seu pipeline de vendas</CardTitle>
-              <CardDescription>Criaremos um pipeline com 5 estágios padrão. Você ajusta em Configurações.</CardDescription>
+              <CardDescription>Criaremos um pipeline com 5 estágios padrão. Você ajusta depois em Negócios → Personalizar pipeline.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1">

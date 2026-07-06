@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Kanban, List, Plus, Filter, Settings2 } from "lucide-react";
+import { Kanban, KanbanSquare, List, Plus, Filter, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { DealsKanban } from "@/components/crm/DealsKanban";
 import { DealsList } from "@/components/crm/DealsList";
@@ -16,14 +16,15 @@ import { PipelineEditor } from "@/components/crm/PipelineEditor";
 import { MonthYearSelect } from "@/components/crm/MonthYearSelect";
 import { useAuth, roleAtLeast } from "@/lib/auth";
 import { useDeals } from "@/hooks/useDeals";
-import { useStages, usePipelines } from "@/hooks/usePipelines";
+import { useStages, usePipelines, invalidatePipelines, invalidateStages } from "@/hooks/usePipelines";
 import { useContacts } from "@/hooks/useContacts";
 import { useCompanies } from "@/hooks/useCompanies";
 import { useLossReasons } from "@/hooks/useLossReasons";
 import { useActivities } from "@/hooks/useActivities";
+import { DEFAULT_STAGES } from "@/lib/constants";
 import {
   createDeal, updateDeal, deleteDeal, moveDealToStage, markDealWon, markDealLost,
-  enrichDeals, type Deal,
+  createPipeline, createStage, enrichDeals, type Deal,
 } from "@/lib/data";
 
 type ViewMode = "kanban" | "list";
@@ -79,6 +80,34 @@ export default function DealsScreen() {
 
   const [selectedDeals, setSelectedDeals] = useState<Set<string>>(new Set());
   const [pipelineDialogOpen, setPipelineDialogOpen] = useState(false);
+
+  // Sem SettingsScreen (removida — Épico 08), este é o único lugar da UI onde
+  // dá pra criar um pipeline do zero quando não existe nenhum ("Personalizar
+  // pipeline" só edita estágios de um pipeline já existente).
+  const [firstPipelineName, setFirstPipelineName] = useState("Pipeline de Vendas");
+  const [creatingFirstPipeline, setCreatingFirstPipeline] = useState(false);
+
+  const createFirstPipeline = async () => {
+    if (!firstPipelineName.trim()) return;
+    setCreatingFirstPipeline(true);
+    try {
+      const pipeline = await createPipeline({ name: firstPipelineName.trim(), is_default: true });
+      if (pipeline?.id) {
+        for (let i = 0; i < DEFAULT_STAGES.length; i++) {
+          const s = DEFAULT_STAGES[i];
+          await createStage({ pipeline_id: pipeline.id, name: s.name, color: s.color, win_probability: s.win_probability, sort_order: i });
+        }
+      }
+      invalidatePipelines();
+      invalidateStages();
+      refreshStages();
+      toast.success("Pipeline criado");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao criar pipeline");
+    } finally {
+      setCreatingFirstPipeline(false);
+    }
+  };
 
   const pipelineStages = useMemo(
     () => stages.filter((s) => s.pipeline_id === selectedPipeline).sort((a, b) => a.sort_order - b.sort_order),
@@ -242,30 +271,54 @@ export default function DealsScreen() {
 
       {showFilters && <DealsFilters filters={filters} onFiltersChange={setFilters} />}
 
-      {viewMode === "kanban" && (
-        <DealsKanban
-          deals={openDeals}
-          wonDeals={wonDeals}
-          lostDeals={lostDeals}
-          stages={pipelineStages}
-          activities={activities}
-          onDragEnd={handleDragEnd}
-          onDealClick={(d) => navigate(`/deals/${d.id}`)}
-          onAddDeal={openNew}
-          onMarkWon={onMarkWon}
-          onMarkLost={openLossModal}
-        />
-      )}
+      {pipelines.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-20 text-center">
+          <KanbanSquare className="h-10 w-10 text-muted-foreground/40 mb-3" />
+          <p className="text-muted-foreground">Nenhum pipeline configurado ainda</p>
+          {canManage ? (
+            <div className="mt-4 flex w-full max-w-xs flex-col gap-2">
+              <Input
+                value={firstPipelineName}
+                onChange={(e) => setFirstPipelineName(e.target.value)}
+                placeholder="Nome do pipeline"
+                className="h-9 text-sm"
+              />
+              <Button size="sm" onClick={createFirstPipeline} disabled={creatingFirstPipeline || !firstPipelineName.trim()}>
+                {creatingFirstPipeline ? "Criando..." : "Criar pipeline (5 estágios padrão)"}
+              </Button>
+            </div>
+          ) : (
+            <p className="mt-1 text-sm text-muted-foreground">Peça a um admin/manager para criar o primeiro pipeline.</p>
+          )}
+        </div>
+      ) : (
+        <>
+          {viewMode === "kanban" && (
+            <DealsKanban
+              deals={openDeals}
+              wonDeals={wonDeals}
+              lostDeals={lostDeals}
+              stages={pipelineStages}
+              activities={activities}
+              onDragEnd={handleDragEnd}
+              onDealClick={(d) => navigate(`/deals/${d.id}`)}
+              onAddDeal={openNew}
+              onMarkWon={onMarkWon}
+              onMarkLost={openLossModal}
+            />
+          )}
 
-      {viewMode === "list" && (
-        <DealsList
-          deals={filteredDeals}
-          stages={stages}
-          selectedDeals={selectedDeals}
-          onSelectionChange={setSelectedDeals}
-          onDealClick={(d) => navigate(`/deals/${d.id}`)}
-          onBatchAction={handleBatchAction}
-        />
+          {viewMode === "list" && (
+            <DealsList
+              deals={filteredDeals}
+              stages={stages}
+              selectedDeals={selectedDeals}
+              onSelectionChange={setSelectedDeals}
+              onDealClick={(d) => navigate(`/deals/${d.id}`)}
+              onBatchAction={handleBatchAction}
+            />
+          )}
+        </>
       )}
 
       {/* Create/Edit Sheet — sem "Responsável" (owner_id é do gateway) */}
