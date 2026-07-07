@@ -373,3 +373,22 @@ export function computeGoalProjection(
   if (elapsedFraction <= 0) return current;
   return current / elapsedFraction;
 }
+
+// ============================================================================
+// ÉPICO: REVOLUÇÃO BANT (Gamificação e Qualificação Inteligente)
+// ============================================================================
+
+export type BantTemperature = "hot" | "warm" | "cold" | "ghost";
+
+/**
+ * Calcula a "temperatura" térmica de um negócio com base na sua qualificação BANT.
+ * Usado para renderizar indicadores visuais gamificados na UI (Story 1) e
+ * calcular win-rates (Story 4).
+ */
+export function getBantTemperature(score: number | null | undefined): BantTemperature {
+  const s = score ?? 0;
+  if (s >= 75) return "hot";
+  if (s >= 50) return "warm";
+  if (s > 0) return "cold";
+  return "ghost";
+}
