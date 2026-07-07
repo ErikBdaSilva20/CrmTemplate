@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
-  computePercentage, getPeriodStart, computeFunnel, computeAtRiskDeals,
-  computeMonthlyRevenue, computePreviousPeriodRevenue, computeAverageSalesCycleDays,
-  computeStageDeals, selectTopDeals, dealPriority,
-  computeGoalActual, computeGoalPace, computeGoalProjection,
+  computePercentage, computeAtRiskDeals,
+  computeAverageSalesCycleDays,
+  selectTopDeals, dealPriority, buildDealPriorityMap,
+  computeGoalActual, computeGoalPace, computeGoalProjection, computeAnnualGoalSummary,
 } from "./analytics";
-import type { Activity, Contact, Deal, PipelineStage, SalesGoal } from "./data";
+import type { Activity, Contact, Deal, SalesGoal } from "./data";
 
 function makeActivity(overrides: Partial<Activity>): Activity {
   return {
@@ -87,19 +87,6 @@ function makeDeal(overrides: Partial<Deal>): Deal {
   };
 }
 
-function makeStage(overrides: Partial<PipelineStage>): PipelineStage {
-  return {
-    id: "stage-1",
-    pipeline_id: "pipeline-1",
-    name: "Stage",
-    sort_order: 0,
-    color: null,
-    win_probability: 50,
-    created_at: new Date().toISOString(),
-    ...overrides,
-  };
-}
-
 describe("computePercentage", () => {
   it("rounds to the nearest integer", () => {
     expect(computePercentage(1, 3)).toBe(33);
@@ -107,54 +94,6 @@ describe("computePercentage", () => {
 
   it("returns 0 when the denominator is 0 (avoids division by zero)", () => {
     expect(computePercentage(5, 0)).toBe(0);
-  });
-});
-
-describe("getPeriodStart", () => {
-  it("returns null for 'all' (no lower bound)", () => {
-    expect(getPeriodStart("all")).toBeNull();
-  });
-
-  it("returns the 1st of the current month for 'this_month'", () => {
-    const now = new Date(2026, 5, 20);
-    const start = getPeriodStart("this_month", now);
-    expect(start?.getDate()).toBe(1);
-    expect(start?.getMonth()).toBe(5);
-  });
-});
-
-describe("computeFunnel", () => {
-  it("sorts stages by sort_order and sums open deal values per stage", () => {
-    const stages = [
-      makeStage({ id: "s2", sort_order: 1, name: "Proposal" }),
-      makeStage({ id: "s1", sort_order: 0, name: "Lead" }),
-    ];
-    const deals = [
-      makeDeal({ id: "d1", stage_id: "s1", value: 100 }),
-      makeDeal({ id: "d2", stage_id: "s1", value: 200 }),
-      makeDeal({ id: "d3", stage_id: "s2", value: 50 }),
-    ];
-    const funnel = computeFunnel(stages, deals);
-    expect(funnel.map((f) => f.name)).toEqual(["Lead", "Proposal"]);
-    expect(funnel[0]).toMatchObject({ id: "s1", count: 2, value: 300 });
-    expect(funnel[1]).toMatchObject({ id: "s2", count: 1, value: 50 });
-  });
-});
-
-describe("computeStageDeals", () => {
-  it("filters deals by stage and sorts by value descending", () => {
-    const deals = [
-      makeDeal({ id: "d1", stage_id: "s1", value: 100 }),
-      makeDeal({ id: "d2", stage_id: "s1", value: 300 }),
-      makeDeal({ id: "d3", stage_id: "s2", value: 999 }),
-    ];
-    const result = computeStageDeals(deals, "s1");
-    expect(result.map((d) => d.id)).toEqual(["d2", "d1"]);
-  });
-
-  it("returns an empty array when the stage has no deals", () => {
-    const deals = [makeDeal({ id: "d1", stage_id: "s1", value: 100 })];
-    expect(computeStageDeals(deals, "s2")).toEqual([]);
   });
 });
 
@@ -245,6 +184,40 @@ describe("dealPriority", () => {
   });
 });
 
+describe("buildDealPriorityMap", () => {
+  const now = new Date(2026, 5, 20);
+
+  it("matches dealPriority per-deal for a mixed batch", () => {
+    const oldCreated = new Date(now.getTime() - 30 * 86_400_000).toISOString();
+    const urgentDeal = makeDeal({ id: "urgent", close_date: new Date(2026, 5, 1).toISOString(), created_at: now.toISOString() });
+    const staleDeal = makeDeal({ id: "stale", close_date: null, created_at: oldCreated });
+    const okDeal = makeDeal({ id: "ok", close_date: null, created_at: now.toISOString() });
+    const deals = [urgentDeal, staleDeal, okDeal];
+    const activities = [makeActivity({ deal_id: "ok", created_at: now.toISOString() })];
+
+    const map = buildDealPriorityMap(deals, activities, now);
+
+    for (const deal of deals) {
+      expect(map.get(deal.id)).toEqual(dealPriority(deal, activities, now));
+    }
+  });
+
+  it("ignores activities belonging to other deals when scoring staleness", () => {
+    const oldCreated = new Date(now.getTime() - 30 * 86_400_000).toISOString();
+    const deal = makeDeal({ id: "d1", close_date: null, created_at: oldCreated });
+    // Atividade recente, mas de outro deal — não deve "salvar" d1 da staleness.
+    const otherActivity = makeActivity({ deal_id: "d2", created_at: now.toISOString() });
+
+    const map = buildDealPriorityMap([deal], [otherActivity], now);
+
+    expect(map.get("d1")?.level).toBe("stale");
+  });
+
+  it("returns an empty map for an empty deal list", () => {
+    expect(buildDealPriorityMap([], [], now).size).toBe(0);
+  });
+});
+
 describe("computeAtRiskDeals", () => {
   const now = new Date(2026, 5, 20);
 
@@ -270,36 +243,6 @@ describe("computeAtRiskDeals", () => {
     ];
     const { closingSoon } = computeAtRiskDeals(deals, now);
     expect(closingSoon.map((d) => d.id)).toEqual(["d1"]);
-  });
-});
-
-describe("computeMonthlyRevenue", () => {
-  it("returns 12 points and sums won revenue for the matching month", () => {
-    const now = new Date(2026, 5, 15);
-    const wonThisMonth = makeDeal({ status: "won", value: 300, created_at: new Date(2026, 5, 1).toISOString() });
-    const points = computeMonthlyRevenue([wonThisMonth], now);
-    expect(points).toHaveLength(12);
-    expect(points[11].receita).toBe(300);
-  });
-
-  it("ignores deals that are not won", () => {
-    const now = new Date(2026, 5, 15);
-    const openDeal = makeDeal({ status: "open", value: 500, created_at: new Date(2026, 5, 1).toISOString() });
-    const points = computeMonthlyRevenue([openDeal], now);
-    expect(points[11].receita).toBe(0);
-  });
-});
-
-describe("computePreviousPeriodRevenue", () => {
-  it("sums won revenue in the prior calendar month for 'this_month'", () => {
-    const now = new Date(2026, 5, 15);
-    const wonLastMonth = makeDeal({ status: "won", value: 400, created_at: new Date(2026, 4, 10).toISOString() });
-    const wonThisMonth = makeDeal({ status: "won", value: 999, created_at: new Date(2026, 5, 10).toISOString() });
-    expect(computePreviousPeriodRevenue([wonLastMonth, wonThisMonth], "this_month", now)).toBe(400);
-  });
-
-  it("returns 0 for periods without a defined prior range (e.g. 'all')", () => {
-    expect(computePreviousPeriodRevenue([], "all", new Date())).toBe(0);
   });
 });
 
@@ -392,5 +335,62 @@ describe("computeGoalProjection", () => {
   it("returns the current value when no time has elapsed", () => {
     const now = new Date(2026, 5, 1);
     expect(computeGoalProjection(500, 6, 2026, now)).toBe(500);
+  });
+});
+
+describe("computeAnnualGoalSummary", () => {
+  const now = new Date(2026, 11, 31); // year fully elapsed, so pace math doesn't interfere
+
+  it("returns 12 points, distinguishing 'no goal registered' from 'goal registered with target 0'", () => {
+    const goals = [
+      makeGoal({ id: "g-jan", period_month: 1, period_year: 2026, target_value: 0 }),
+    ];
+    const points = computeAnnualGoalSummary(goals, [], [], [], 2026, now);
+    expect(points).toHaveLength(12);
+
+    const jan = points[0];
+    expect(jan.hasGoal).toBe(true);
+    expect(jan.target).toBe(0);
+    expect(jan.pace).not.toBeNull();
+
+    const feb = points[1];
+    expect(feb.hasGoal).toBe(false);
+    expect(feb.pace).toBeNull();
+  });
+
+  it("sums target and actual across multiple goals of the same type in the same month", () => {
+    const globalGoal = makeGoal({ id: "g1", period_month: 3, period_year: 2026, target_value: 1000 });
+    const dealGoal = makeGoal({ id: "g2", period_month: 3, period_year: 2026, target_value: 500, deal_id: "d1" });
+    const wonGlobal = makeDeal({ id: "d-global", status: "won", value: 200, updated_at: new Date(2026, 2, 10).toISOString() });
+    const wonLinkedDeal = makeDeal({ id: "d1", status: "won", value: 500 });
+
+    const points = computeAnnualGoalSummary([globalGoal, dealGoal], [wonGlobal, wonLinkedDeal], [], [], 2026, now);
+    const march = points[2];
+    expect(march.target).toBe(1500);
+    expect(march.actual).toBe(700); // 200 (global scope) + 500 (deal-scoped)
+  });
+
+  it("computes month-over-month variation, null in January and when the previous month had no actual", () => {
+    const janGoal = makeGoal({ id: "g-jan", period_month: 1, period_year: 2026, target_value: 100 });
+    const febGoal = makeGoal({ id: "g-feb", period_month: 2, period_year: 2026, target_value: 100 });
+    const marGoal = makeGoal({ id: "g-mar", period_month: 3, period_year: 2026, target_value: 100 });
+
+    const wonFeb = makeDeal({ status: "won", value: 100, updated_at: new Date(2026, 1, 10).toISOString() });
+    const wonMar = makeDeal({ status: "won", value: 150, updated_at: new Date(2026, 2, 10).toISOString() });
+
+    const points = computeAnnualGoalSummary([janGoal, febGoal, marGoal], [wonFeb, wonMar], [], [], 2026, now);
+
+    expect(points[0].momVariation).toBeNull(); // January: no previous month
+    expect(points[1].momVariation).toBeNull(); // February: previous (January) actual was 0
+    expect(points[2].momVariation).toBe(50); // March: 150 vs 100 = +50%
+  });
+
+  it("agrees with computeGoalActual for the same month (parity — no reimplementation of the calculation)", () => {
+    const goal = makeGoal({ id: "g1", period_month: 5, period_year: 2026, target_value: 1000 });
+    const deals = [makeDeal({ status: "won", value: 777, updated_at: new Date(2026, 4, 15).toISOString() })];
+
+    const points = computeAnnualGoalSummary([goal], deals, [], [], 2026, now);
+    const direct = computeGoalActual(goal, deals, [], [], 5, 2026);
+    expect(points[4].actual).toBe(direct);
   });
 });

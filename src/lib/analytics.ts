@@ -6,41 +6,12 @@
 // and keeps the screen focused on layout.
 import { ACTIVITY_TYPE, CONTACT_STATUS } from "@/lib/domain";
 import { monthsUntil, daysAgo } from "@/lib/format";
-import type { Activity, Contact, Deal, PipelineStage, SalesGoal } from "@/lib/data";
+import type { Activity, Contact, Deal, SalesGoal } from "@/lib/data";
 
-export type PeriodFilter = "today" | "this_week" | "this_month" | "this_quarter" | "this_year" | "all";
-
-const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const WEEKDAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 export function computePercentage(numerator: number, denominator: number): number {
   return denominator > 0 ? Math.round((numerator / denominator) * 100) : 0;
-}
-
-export function getPeriodStart(period: PeriodFilter, now = new Date()): Date | null {
-  switch (period) {
-    case "today":
-      return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    case "this_week": {
-      const d = new Date(now);
-      d.setDate(d.getDate() - d.getDay());
-      d.setHours(0, 0, 0, 0);
-      return d;
-    }
-    case "this_month":
-      return new Date(now.getFullYear(), now.getMonth(), 1);
-    case "this_quarter":
-      return new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-    case "this_year":
-      return new Date(now.getFullYear(), 0, 1);
-    case "all":
-      return null;
-  }
-}
-
-export function isInPeriod(dateStr: string | null, start: Date | null): boolean {
-  if (!start || !dateStr) return true;
-  return new Date(dateStr) >= start;
 }
 
 export function computeAverageSalesCycleDays(wonDeals: Deal[]): number {
@@ -51,98 +22,6 @@ export function computeAverageSalesCycleDays(wonDeals: Deal[]): number {
     return sum + Math.floor((updated.getTime() - created.getTime()) / 86_400_000);
   }, 0);
   return Math.round(totalDays / wonDeals.length);
-}
-
-// Won revenue in the equivalent previous period (e.g. last month, for
-// "this_month"), used to compute the period-over-period variation badge.
-export function computePreviousPeriodRevenue(deals: Deal[], period: PeriodFilter, now = new Date()): number {
-  let prevStart: Date;
-  let prevEnd: Date;
-
-  switch (period) {
-    case "this_month":
-      prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      prevEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-      break;
-    case "this_quarter": {
-      const quarterStart = Math.floor(now.getMonth() / 3) * 3;
-      prevStart = new Date(now.getFullYear(), quarterStart - 3, 1);
-      prevEnd = new Date(now.getFullYear(), quarterStart, 0);
-      break;
-    }
-    default:
-      return 0;
-  }
-
-  return deals
-    .filter(
-      (d) =>
-        d.status === "won" &&
-        d.created_at &&
-        new Date(d.created_at) >= prevStart &&
-        new Date(d.created_at) <= prevEnd,
-    )
-    .reduce((sum, d) => sum + d.value, 0);
-}
-
-export interface MonthlyRevenuePoint {
-  month: string;
-  receita: number;
-  tendencia: number;
-}
-
-// Last 12 months of won revenue, plus a 3-month trailing-average trend line.
-export function computeMonthlyRevenue(deals: Deal[], now = new Date()): MonthlyRevenuePoint[] {
-  const points: MonthlyRevenuePoint[] = [];
-  for (let i = 11; i >= 0; i--) {
-    const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const wonInMonth = deals.filter((deal) => {
-      if (deal.status !== "won" || !deal.created_at) return false;
-      const closedAt = new Date(deal.created_at);
-      return closedAt.getFullYear() === monthDate.getFullYear() && closedAt.getMonth() === monthDate.getMonth();
-    });
-    points.push({
-      month: MONTHS_PT[monthDate.getMonth()],
-      receita: wonInMonth.reduce((sum, deal) => sum + deal.value, 0),
-      tendencia: 0,
-    });
-  }
-  for (let i = 0; i < points.length; i++) {
-    const window = points.slice(Math.max(0, i - 2), i + 1);
-    points[i].tendencia = Math.round(window.reduce((sum, p) => sum + p.receita, 0) / window.length);
-  }
-  return points;
-}
-
-export interface FunnelStage {
-  id: string;
-  name: string;
-  count: number;
-  value: number;
-  color: string;
-}
-
-export function computeFunnel(stages: PipelineStage[], openDeals: Deal[]): FunnelStage[] {
-  return [...stages]
-    .sort((a, b) => a.sort_order - b.sort_order)
-    .map((stage) => {
-      const stageDeals = openDeals.filter((d) => d.stage_id === stage.id);
-      return {
-        id: stage.id,
-        name: stage.name,
-        count: stageDeals.length,
-        value: stageDeals.reduce((sum, d) => sum + d.value, 0),
-        color: stage.color || "hsl(var(--primary))",
-      };
-    });
-}
-
-// Deals for one stage, highest value first — feeds the Dashboard's
-// expandable "Pipeline por Estágio" rows.
-export function computeStageDeals(openDeals: Deal[], stageId: string): Deal[] {
-  return openDeals
-    .filter((d) => d.stage_id === stageId)
-    .sort((a, b) => b.value - a.value);
 }
 
 // Deals mais relevantes para o card de resumo do Dashboard: maior
@@ -216,6 +95,36 @@ export function dealPriority(
   return { level, reasons };
 }
 
+// Variante em lote de dealPriority: agrupa activities por deal_id uma única
+// vez (O(activities)) em vez de cada chamada de dealPriority refazer um
+// filter na lista inteira (O(deals × activities) quando chamada dentro de um
+// loop/sort, como no Kanban). Use isto sempre que precisar da prioridade de
+// mais de um deal de uma vez.
+export function buildDealPriorityMap(
+  deals: Deal[],
+  activities: Activity[],
+  now = new Date(),
+  staleDays = STALE_DAYS_DEFAULT,
+  highValueThreshold = HIGH_VALUE_THRESHOLD_DEFAULT,
+): Map<string, DealPriority> {
+  const activitiesByDeal = new Map<string, Activity[]>();
+  for (const activity of activities) {
+    if (!activity.deal_id) continue;
+    const bucket = activitiesByDeal.get(activity.deal_id);
+    if (bucket) bucket.push(activity);
+    else activitiesByDeal.set(activity.deal_id, [activity]);
+  }
+
+  const result = new Map<string, DealPriority>();
+  for (const deal of deals) {
+    result.set(
+      deal.id,
+      dealPriority(deal, activitiesByDeal.get(deal.id) ?? [], now, staleDays, highValueThreshold),
+    );
+  }
+  return result;
+}
+
 export interface AtRiskDeals {
   inactive: Deal[];
   closingSoon: Deal[];
@@ -268,8 +177,10 @@ export function computeActivitiesByDayOfWeek(activities: Activity[]): WeekdayCou
   return WEEKDAYS_PT.map((day, i) => ({ day, count: counts[i] }));
 }
 
-export function computeNewLeadsByStatus(contacts: Contact[], periodStart: Date | null): NamedCount[] {
-  const periodContacts = contacts.filter((c) => isInPeriod(c.created_at, periodStart));
+// Recebe os contatos já recortados pelo Período ativo (src/lib/period.ts +
+// periodAggregation.ts) — o recorte por data não é mais responsabilidade
+// desta função, só a quebra por status.
+export function computeNewLeadsByStatus(periodContacts: Contact[]): NamedCount[] {
   const counts: Partial<Record<Contact["status"], number>> = {};
   periodContacts.forEach((c) => {
     const status = c.status || "lead";
@@ -372,6 +283,67 @@ export function computeGoalProjection(
   const elapsedFraction = totalMs > 0 ? elapsedMs / totalMs : 1;
   if (elapsedFraction <= 0) return current;
   return current / elapsedFraction;
+}
+
+export interface MonthlyGoalPoint {
+  month: number; // 1-12
+  // Distingue "sem meta cadastrada" (nenhuma meta desse tipo nesse mês) de
+  // "meta 0" (meta cadastrada com target_value 0) — PRD §4.4 FR-11, decisão
+  // confirmada: essa distinção é obrigatória, não cosmética.
+  hasGoal: boolean;
+  target: number;
+  actual: number;
+  percent: number;
+  pace: GoalPaceStatus | null; // null quando hasGoal é false — ritmo não se aplica a um mês sem meta
+  // Variação do realizado vs. o mês anterior do mesmo ano. null em janeiro
+  // (sem mês anterior no ano) e quando o mês anterior teve actual === 0 —
+  // nesse caso 0% significaria "sem mudança", o que seria enganoso quando
+  // na verdade não havia base de comparação.
+  momVariation: number | null;
+}
+
+// Visão Anual de um tipo de meta (FR-11/FR-12): os 12 meses do ano para um
+// único goal_type, reaproveitando computeGoalActual/computeGoalPace por mês
+// em vez de reimplementar o cálculo de realizado. `goalsOfType` deve já vir
+// filtrada por goal_type (e period_year, opcionalmente) pelo chamador —
+// várias metas do mesmo tipo no mesmo mês (ex: uma meta global + uma
+// vinculada a um negócio específico) são somadas.
+export function computeAnnualGoalSummary(
+  goalsOfType: SalesGoal[],
+  deals: Deal[],
+  activities: Activity[],
+  contacts: Contact[],
+  year: number,
+  now = new Date(),
+): MonthlyGoalPoint[] {
+  const points: MonthlyGoalPoint[] = [];
+
+  for (let month = 1; month <= 12; month++) {
+    const monthGoals = goalsOfType.filter((g) => g.period_month === month && g.period_year === year);
+    const hasGoal = monthGoals.length > 0;
+    const target = monthGoals.reduce((sum, g) => sum + (g.target_value ?? 0), 0);
+    const actual = monthGoals.reduce(
+      (sum, g) => sum + computeGoalActual(g, deals, activities, contacts, month, year),
+      0,
+    );
+    const percent = computePercentage(actual, target);
+    points.push({
+      month,
+      hasGoal,
+      target,
+      actual,
+      percent,
+      pace: hasGoal ? computeGoalPace(percent, month, year, now) : null,
+      momVariation: null,
+    });
+  }
+
+  for (let i = 1; i < points.length; i++) {
+    const prevActual = points[i - 1].actual;
+    points[i].momVariation = prevActual > 0 ? Math.round(((points[i].actual - prevActual) / prevActual) * 100) : null;
+  }
+
+  return points;
 }
 
 // ============================================================================
