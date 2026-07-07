@@ -10,6 +10,9 @@ import type { DealWithRelations, PipelineStage } from "@/lib/data";
 import { DEAL_STATUS } from "@/lib/domain";
 import { formatCurrency, formatMonthYear, monthsUntil } from "@/lib/format";
 import { BantBadge } from "@/components/crm/BantBadge";
+import { useVirtualTable } from "@/hooks/useVirtualTable";
+
+const COLUMN_COUNT = 8;
 
 type Stage = PipelineStage;
 
@@ -67,6 +70,8 @@ export function DealsList({
     return stages.find((s) => s.id === stageId)?.name || "—";
   };
 
+  const { scrollRef, rows, paddingTop, paddingBottom } = useVirtualTable({ count: sorted.length });
+
   const SortHeader = ({ label, field }: { label: string; field: SortKey }) => (
     <button onClick={() => toggleSort(field)} className="flex items-center gap-1 hover:text-foreground transition-colors">
       {label}
@@ -91,9 +96,9 @@ export function DealsList({
         </div>
       )}
 
-      <div className="rounded-md border border-border overflow-x-auto">
+      <div ref={scrollRef} className="rounded-md border border-border overflow-auto max-h-[70vh]">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
               <TableHead className="w-10">
                 <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Selecionar todos" />
@@ -108,12 +113,16 @@ export function DealsList({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sorted.map((deal) => {
+            {paddingTop > 0 && (
+              <tr><td colSpan={COLUMN_COUNT} style={{ height: paddingTop }} /></tr>
+            )}
+            {rows.map(({ index, key }) => {
+              const deal = sorted[index];
               const monthsToClose = deal.close_date ? monthsUntil(deal.close_date) : null;
               const isUrgent = monthsToClose !== null && monthsToClose <= 0;
 
               return (
-                <TableRow key={deal.id} className="cursor-pointer" onClick={() => onDealClick(deal)}>
+                <TableRow key={key} className="cursor-pointer" onClick={() => onDealClick(deal)}>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <Checkbox checked={selectedDeals.has(deal.id)} onCheckedChange={() => toggleOne(deal.id)} />
                   </TableCell>
@@ -151,9 +160,12 @@ export function DealsList({
                 </TableRow>
               );
             })}
+            {paddingBottom > 0 && (
+              <tr><td colSpan={COLUMN_COUNT} style={{ height: paddingBottom }} /></tr>
+            )}
             {sorted.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={COLUMN_COUNT} className="py-10 text-center text-muted-foreground">
                   Nenhum negócio encontrado
                 </TableCell>
               </TableRow>

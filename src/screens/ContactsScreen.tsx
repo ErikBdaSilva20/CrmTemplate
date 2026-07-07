@@ -154,10 +154,12 @@ export default function ContactsScreen() {
     }
   };
 
-  const allSelected = paginated.length > 0 && paginated.every((c) => selectedContacts.has(c.id));
+  // Base em `sorted` (não `paginated`): a tabela agora é virtualizada e
+  // mostra a lista inteira filtrada/ordenada, sem paginação client-side.
+  const allSelected = sorted.length > 0 && sorted.every((c) => selectedContacts.has(c.id));
   const toggleAll = () => {
     if (allSelected) setSelectedContacts(new Set());
-    else setSelectedContacts(new Set(paginated.map((c) => c.id)));
+    else setSelectedContacts(new Set(sorted.map((c) => c.id)));
   };
   const toggleOne = (id: string) => {
     const next = new Set(selectedContacts);
@@ -239,7 +241,7 @@ export default function ContactsScreen() {
 
       {viewMode === 'table' && (
         <ContactsTable
-          contacts={paginated}
+          contacts={sorted}
           companies={companies}
           lastActivityMap={lastActivityMap}
           onSort={toggleSort}
@@ -264,8 +266,9 @@ export default function ContactsScreen() {
         />
       )}
 
-      {/* Pagination (table/cards only) */}
-      {viewMode !== 'status' && totalPages > 1 && (
+      {/* Paginação — só na visão de cartões; a tabela é virtualizada e mostra
+          a lista inteira filtrada/ordenada num scroll único (§4). */}
+      {viewMode === 'cards' && totalPages > 1 && (
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">
             Página {page + 1} de {totalPages} · {sorted.length} contatos

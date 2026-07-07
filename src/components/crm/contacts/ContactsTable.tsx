@@ -8,6 +8,9 @@ import { AlertTriangle, ArrowUpDown } from "lucide-react";
 import { CONTACT_STATUS } from "@/lib/domain";
 import { formatDate, daysAgo } from "@/lib/format";
 import type { Company, Contact } from "@/lib/data";
+import { useVirtualTable } from "@/hooks/useVirtualTable";
+
+const COLUMN_COUNT = 8;
 
 export type ContactsSortKey = "name" | "email" | "status" | "created_at" | "title";
 export type ContactsSortDir = "asc" | "desc";
@@ -56,10 +59,15 @@ export function ContactsTable({
     return daysAgo(ref);
   };
 
+  const { scrollRef, rows, paddingTop, paddingBottom } = useVirtualTable({
+    count: contacts.length,
+    estimateRowHeight: 57,
+  });
+
   return (
-    <div className="rounded-md border border-border overflow-x-auto">
+    <div ref={scrollRef} className="rounded-md border border-border overflow-auto max-h-[70vh]">
       <Table>
-        <TableHeader>
+        <TableHeader className="sticky top-0 z-10 bg-background">
           <TableRow>
             <TableHead className="w-10">
               <Checkbox checked={allSelected} onCheckedChange={onToggleAll} aria-label="Selecionar todos" />
@@ -74,13 +82,17 @@ export function ContactsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {contacts.map((c) => {
+          {paddingTop > 0 && (
+            <tr><td colSpan={COLUMN_COUNT} style={{ height: paddingTop }} /></tr>
+          )}
+          {rows.map(({ index, key }) => {
+            const c = contacts[index];
             const days = getInactivityDays(c.id, c.created_at);
             const isInactive = days !== null && days < 14 ? false : days !== null;
             const isHigh = days !== null && days >= 21;
 
             return (
-              <TableRow key={c.id} className="cursor-pointer" onClick={() => onRowClick(c.id)}>
+              <TableRow key={key} className="cursor-pointer" onClick={() => onRowClick(c.id)}>
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <Checkbox
                     checked={selectedContacts.has(c.id)}
@@ -138,9 +150,12 @@ export function ContactsTable({
               </TableRow>
             );
           })}
+          {paddingBottom > 0 && (
+            <tr><td colSpan={COLUMN_COUNT} style={{ height: paddingBottom }} /></tr>
+          )}
           {contacts.length === 0 && (
             <TableRow>
-              <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+              <TableCell colSpan={COLUMN_COUNT} className="py-10 text-center text-muted-foreground">
                 Nenhum contato encontrado
               </TableCell>
             </TableRow>
