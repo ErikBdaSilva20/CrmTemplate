@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseCsv } from "./csv";
+import { parseCsv, escapeCsvField } from "./csv";
 
 describe("parseCsv", () => {
   it("splits plain comma-separated rows", () => {
@@ -50,5 +50,29 @@ describe("parseCsv", () => {
 
   it("returns an empty array for empty input", () => {
     expect(parseCsv("")).toEqual([]);
+  });
+});
+
+describe("escapeCsvField", () => {
+  it("prefixes a leading '=' to neutralize formula injection (CWE-1236)", () => {
+    expect(escapeCsvField("=cmd|'/c calc'")).toBe("'=cmd|'/c calc'");
+  });
+
+  it("prefixes a leading '+', '-' or '@' the same way", () => {
+    expect(escapeCsvField("+1234")).toBe("'+1234");
+    expect(escapeCsvField("-1234")).toBe("'-1234");
+    expect(escapeCsvField("@mention")).toBe("'@mention");
+  });
+
+  it("leaves an ordinary value untouched", () => {
+    expect(escapeCsvField("Acme Inc")).toBe("Acme Inc");
+  });
+
+  it("still quotes a formula-prefixed value that also contains a comma", () => {
+    expect(escapeCsvField("=1,2")).toBe('"\'=1,2"');
+  });
+
+  it("does not touch a minus sign that isn't the first character", () => {
+    expect(escapeCsvField("R$ -100")).toBe("R$ -100");
   });
 });

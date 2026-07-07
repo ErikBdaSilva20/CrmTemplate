@@ -52,12 +52,21 @@ export interface CsvColumn<T> {
   accessor: (row: T) => string | number | null | undefined;
 }
 
-function escapeCsvField(value: string): string {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+// Campos que começam com =, +, -, @ são interpretados como fórmula por
+// Excel/Sheets ao abrir o CSV — um nome de contato/empresa como
+// `=HYPERLINK("http://evil","x")` viraria fórmula executável (CSV
+// injection, CWE-1236). Prefixar com `'` neutraliza sem alterar o valor
+// visível (Excel/Sheets tratam `'` como marcador de texto, não o exibem).
+const FORMULA_PREFIX_PATTERN = /^[=+\-@]/;
+
+export function escapeCsvField(value: string): string {
+  const safe = FORMULA_PREFIX_PATTERN.test(value) ? `'${value}` : value;
+  return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
 // Gera e dispara o download de um CSV a partir de linhas + definição de
-// colunas (label + accessor), com escape correto de aspas/vírgulas/quebras.
+// colunas (label + accessor), com escape correto de aspas/vírgulas/quebras
+// e neutralização de fórmula (todo export do app passa por aqui).
 export function exportToCsv<T>(rows: T[], columns: CsvColumn<T>[], filename: string): void {
   const lines = [
     columns.map((c) => escapeCsvField(c.label)).join(","),

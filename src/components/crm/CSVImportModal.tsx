@@ -16,6 +16,8 @@ import {
   type ContactInsert, type CompanyInsert,
 } from "@/lib/data";
 import { parseCsv } from "@/lib/csv";
+import { coerceEnumValue } from "@/lib/enum";
+import { CONTACT_STATUSES } from "@/lib/domain";
 
 interface CSVImportModalProps {
   open: boolean;
@@ -24,18 +26,30 @@ interface CSVImportModalProps {
   entityType: "contacts" | "companies";
 }
 
-const contactFields = [
+interface ImportField {
+  key: string;
+  label: string;
+  // Valida/normaliza a célula bruta contra um enum do domínio antes de
+  // enviar pro backend (src/lib/enum.ts). Campos sem `coerce` são texto
+  // livre — vão como o usuário digitou. `null` (fora do enum, ou vazio)
+  // faz handleImport omitir a chave, deixando o default do schema assumir
+  // em vez de arriscar um valor que quebra `CONTACT_STATUS[status]`
+  // (ou equivalente) na primeira tela que renderizar o registro.
+  coerce?: (raw: string) => string | null;
+}
+
+const contactFields: ImportField[] = [
   { key: "first_name", label: "Nome" },
   { key: "last_name", label: "Sobrenome" },
   { key: "email", label: "Email" },
   { key: "phone", label: "Telefone" },
   { key: "title", label: "Cargo" },
-  { key: "status", label: "Status" },
+  { key: "status", label: "Status", coerce: (raw) => coerceEnumValue(raw, CONTACT_STATUSES) },
   { key: "linkedin_url", label: "LinkedIn" },
   { key: "__skip", label: "— Ignorar —" },
 ];
 
-const companyFields = [
+const companyFields: ImportField[] = [
   { key: "name", label: "Nome" },
   { key: "domain", label: "Domínio" },
   { key: "industry", label: "Indústria" },
@@ -94,9 +108,11 @@ export function CSVImportModal({ open, onOpenChange, onImported, entityType }: C
       const records = csvRows.map((row) => {
         const record: Record<string, string | null> = {};
         Object.entries(mapping).forEach(([colIdx, fieldKey]) => {
-          if (fieldKey !== "__skip") {
-            record[fieldKey] = row[Number(colIdx)] || null;
-          }
+          if (fieldKey === "__skip") return;
+          const raw = row[Number(colIdx)] || null;
+          const field = fields.find((f) => f.key === fieldKey);
+          const value = field?.coerce && raw ? field.coerce(raw) : raw;
+          if (value !== null) record[fieldKey] = value;
         });
         return record;
       });
