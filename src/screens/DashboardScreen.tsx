@@ -6,6 +6,7 @@ import { ActivitiesTypeChart } from '@/components/crm/dashboard/ActivitiesTypeCh
 import { ActivitiesByDayChart } from '@/components/crm/dashboard/ActivitiesByDayChart';
 import { NewLeadsByStatusChart } from '@/components/crm/dashboard/NewLeadsByStatusChart';
 import { RiskDealsSection } from '@/components/crm/dashboard/RiskDealsSection';
+import { BantEfficiencyCard } from '@/components/crm/dashboard/BantEfficiencyCard';
 import { useActivities } from '@/hooks/useActivities';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useContacts } from '@/hooks/useContacts';
@@ -174,6 +175,8 @@ export default function DashboardScreen() {
       </div>
 
       <RiskDealsSection atRiskDeals={atRiskDeals} />
+
+      <BantEfficiencyCard deals={filteredDeals} />
     </div>
   );
 }

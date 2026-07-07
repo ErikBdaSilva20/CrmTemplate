@@ -491,6 +491,7 @@ export default function DealDetailScreen() {
             dealId={deal.id}
             qualification={deal.qualification}
             qualificationScore={deal.qualification_score || 0}
+            isLateStage={currentStageIndex >= Math.max(0, orderedStages.length - 2)}
             onUpdate={refreshDeals}
           />
 
