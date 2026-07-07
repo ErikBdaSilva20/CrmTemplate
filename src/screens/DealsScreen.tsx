@@ -133,13 +133,14 @@ export default function DealsScreen() {
   );
 
   const filteredDeals = deals.filter((d) => {
+    if (filters.onlyHot && (d.qualification_score ?? 0) < 75) return false;
     if (filters.minValue && d.value < filters.minValue) return false;
     if (filters.maxValue && d.value > filters.maxValue) return false;
     if (filters.closeDateFrom && d.close_date && d.close_date < filters.closeDateFrom) return false;
     if (filters.closeDateTo && d.close_date && d.close_date > filters.closeDateTo) return false;
-    if (viewMode === 'kanban') {
+    if (viewMode === "kanban") {
       const stageIds = pipelineStages.map((s) => s.id);
-      if (d.stage_id && !stageIds.includes(d.stage_id) && d.status === 'open') return false;
+      if (d.stage_id && !stageIds.includes(d.stage_id) && d.status === "open") return false;
     }
     return true;
   });

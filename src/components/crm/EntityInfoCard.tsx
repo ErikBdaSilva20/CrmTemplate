@@ -1,4 +1,4 @@
-import { QualificationBar } from '@/components/crm/QualificationBar';
+import { BantBadge } from '@/components/crm/BantBadge';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { Activity, DealWithRelations } from '@/lib/data';
@@ -77,7 +77,9 @@ export function EntityInfoCard({ deal, activities }: EntityInfoCardProps) {
           </span>
         </div>
 
-        {deal.qualification_score > 0 && <QualificationBar score={deal.qualification_score} />}
+        <div className="pt-1">
+          <BantBadge score={deal.qualification_score} />
+        </div>
 
         <div className="space-y-1 border-t border-border pt-2">
           {dealActivities.length > 0 ? (

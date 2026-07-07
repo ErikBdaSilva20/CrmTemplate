@@ -1,4 +1,4 @@
-import { QualificationBar } from '@/components/crm/QualificationBar';
+import { BantBadge } from '@/components/crm/BantBadge';
 import { dealPriority, type DealPriorityLevel } from '@/lib/analytics';
 import type { Activity, DealWithRelations, PipelineStage } from '@/lib/data';
 import { DEAL_STATUS } from '@/lib/domain';
@@ -184,11 +184,9 @@ function DealCard({
               </button>
             )}
           </div>
-          {(deal.qualification_score ?? 0) > 0 && (
-            <div className="mt-1.5">
-              <QualificationBar score={deal.qualification_score} />
-            </div>
-          )}
+          <div className="mt-1.5">
+            <BantBadge score={deal.qualification_score} />
+          </div>
         </div>
       </div>
     </div>
@@ -317,11 +315,9 @@ function CollapsibleStatusColumn({
               <p className={`text-xs font-semibold mt-0.5 ${color}`}>
                 {formatCurrency(deal.value, deal.currency || 'BRL')}
               </p>
-              {deal.qualification_score > 0 && (
-                <div className="mt-1">
-                  <QualificationBar score={deal.qualification_score} />
-                </div>
-              )}
+              <div className="mt-1">
+                <BantBadge score={deal.qualification_score} />
+              </div>
             </div>
           ))}
         </div>

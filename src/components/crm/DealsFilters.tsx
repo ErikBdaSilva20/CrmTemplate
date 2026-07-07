@@ -1,7 +1,8 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { X } from 'lucide-react';
+import { X, Flame } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 
 // Filtro de "Responsável" removido: no modo genérico não há diretório de usuários
 // e o rep só enxerga os próprios registros (isolamento no gateway).
@@ -10,6 +11,7 @@ export interface DealFilters {
   maxValue?: number;
   closeDateFrom?: string;
   closeDateTo?: string;
+  onlyHot?: boolean;
 }
 
 interface DealsFiltersProps {
@@ -76,6 +78,18 @@ export function DealsFilters({ filters, onFiltersChange }: DealsFiltersProps) {
             onFiltersChange({ ...filters, closeDateTo: e.target.value || undefined })
           }
         />
+      </div>
+
+      <div className="flex items-center gap-2 h-8 px-2 mt-auto mb-0.5 rounded-md bg-orange-500/10 border border-orange-500/20">
+        <Switch
+          id="sniper-mode"
+          checked={filters.onlyHot || false}
+          onCheckedChange={(checked) => onFiltersChange({ ...filters, onlyHot: checked || undefined })}
+        />
+        <Label htmlFor="sniper-mode" className="text-xs font-bold text-orange-600 flex items-center gap-1 cursor-pointer">
+          <Flame className="h-3.5 w-3.5 fill-orange-500" />
+          Apenas Quentes (Hot)
+        </Label>
       </div>
 
       {hasFilters && (

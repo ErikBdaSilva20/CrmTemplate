@@ -9,10 +9,11 @@ import { ArrowUpDown, Trophy, XCircle, Trash2, AlertTriangle } from "lucide-reac
 import type { DealWithRelations, PipelineStage } from "@/lib/data";
 import { DEAL_STATUS } from "@/lib/domain";
 import { formatCurrency, formatMonthYear, monthsUntil } from "@/lib/format";
+import { BantBadge } from "@/components/crm/BantBadge";
 
 type Stage = PipelineStage;
 
-type SortKey = "title" | "value" | "close_date" | "probability" | "status" | "created_at";
+type SortKey = "title" | "value" | "close_date" | "probability" | "status" | "created_at" | "qualification_score";
 type SortDir = "asc" | "desc";
 
 interface DealsListProps {
@@ -44,6 +45,7 @@ export function DealsList({
       case "close_date": cmp = (a.close_date || "").localeCompare(b.close_date || ""); break;
       case "status": cmp = (a.status || "").localeCompare(b.status || ""); break;
       case "created_at": cmp = (a.created_at || "").localeCompare(b.created_at || ""); break;
+      case "qualification_score": cmp = (a.qualification_score ?? 0) - (b.qualification_score ?? 0); break;
     }
     return sortDir === "asc" ? cmp : -cmp;
   });
@@ -100,6 +102,7 @@ export function DealsList({
               <TableHead><SortHeader label="Valor" field="value" /></TableHead>
               <TableHead className="hidden md:table-cell">Estágio</TableHead>
               <TableHead className="hidden lg:table-cell"><SortHeader label="Probabilidade" field="probability" /></TableHead>
+              <TableHead className="hidden xl:table-cell"><SortHeader label="BANT" field="qualification_score" /></TableHead>
               <TableHead className="hidden sm:table-cell"><SortHeader label="Fechamento" field="close_date" /></TableHead>
               <TableHead><SortHeader label="Status" field="status" /></TableHead>
             </TableRow>
@@ -129,6 +132,9 @@ export function DealsList({
                       <Badge variant="secondary" className="text-xs">{deal.probability}%</Badge>
                     )}
                   </TableCell>
+                  <TableCell className="hidden xl:table-cell">
+                    <BantBadge score={deal.qualification_score} />
+                  </TableCell>
                   <TableCell className="hidden sm:table-cell">
                     {deal.close_date ? (
                       <div className={`flex items-center gap-1 text-sm capitalize ${isUrgent ? "text-destructive font-medium" : "text-muted-foreground"}`}>
@@ -147,7 +153,7 @@ export function DealsList({
             })}
             {sorted.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
                   Nenhum negócio encontrado
                 </TableCell>
               </TableRow>
