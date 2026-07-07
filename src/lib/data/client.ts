@@ -8,23 +8,28 @@
 //              gateway CRUD API: GET/POST/PATCH/DELETE /data/:table. The whole
 //              app depends only on this shape — no table-specific endpoints.
 //
-//   • `auth` → MOCKED for now (see mock-auth.ts). It is the ONLY faked piece.
-//              Login/session are simulated so you can enter the app before a
-//              real auth backend exists.
+//   • `auth` → auto-switches on `isBackendConfigured` (same flag `db` uses):
+//              no `VITE_GATEWAY_URL` → falls back to the mock (mock-auth.ts);
+//              `VITE_GATEWAY_URL` set → calls the gateway's Better-Auth
+//              `/auth/*` endpoints for real. See `doc/ALERTA-AUTH-GATEWAY.md`
+//              for the security notes on this switch (endpoint paths assumed,
+//              not yet verified against a live tenant-gateway).
 //
 // ── HOW TO CONNECT A REAL BACKEND ────────────────────────────────────────────
 //   1. Data: set `VITE_GATEWAY_URL` (env var) to your tenant-gateway base URL.
 //      `db` immediately starts hitting it — no code change. Until it is set,
 //      `db` calls throw `BackendNotConfiguredError` and the UI shows a banner
 //      (see BackendNotice / AppLayout) instead of pretending to have data.
-//   2. Auth: replace the four `auth` methods below (they delegate to the mock)
-//      with `api(...)` calls to your gateway's `/auth/*` endpoints, exactly like
-//      `db` does. Then delete mock-auth.ts. Nothing else in the app changes.
+//   2. Auth: setting `VITE_GATEWAY_URL` is ALSO enough for `auth` — it stops
+//      calling the mock and starts hitting `/auth/*` on the same gateway.
+//      Nothing else in the app changes. mock-auth.ts can stay in the repo
+//      (it's simply unused once a gateway is configured) or be deleted.
 //
 // This file is the contract. Keep the `db` / `auth` shapes stable so the rest
 // of the app (repos, hooks, screens) stays backend-agnostic.
 // =============================================================================
 import { mockAuth } from "./mock-auth";
+import type { Me } from "./mock-auth";
 
 export type { Role, Me } from "./mock-auth";
 
@@ -81,11 +86,23 @@ export const db = {
   },
 };
 
-// Auth — MOCKED (mock-auth.ts). To integrate real auth, swap each line below for
-// an `api(...)` call to your gateway's /auth/* endpoint, then delete mock-auth.ts.
+// Auth — real gateway (Better-Auth) when `isBackendConfigured`, mock-auth.ts
+// otherwise. Password hashing/session issuing happens server-side in
+// Better-Auth; this file only ever sends email/password over HTTPS, never
+// hashes anything itself (Importantdoc §B3: "NUNCA implemente auth próprio").
 export const auth = {
-  signIn: (email: string, password: string) => mockAuth.signIn(email, password),
-  signUp: (email: string, password: string, name?: string) => mockAuth.signUp(email, password, name),
-  signOut: () => mockAuth.signOut(),
-  me: () => mockAuth.me(),
+  signIn: (email: string, password: string) =>
+    isBackendConfigured
+      ? api<{ ok: true }>("POST", "/auth/sign-in/email", { email, password })
+      : mockAuth.signIn(email, password),
+
+  signUp: (email: string, password: string, name?: string) =>
+    isBackendConfigured
+      ? api<{ ok: true }>("POST", "/auth/sign-up/email", { email, password, name })
+      : mockAuth.signUp(email, password, name),
+
+  signOut: () =>
+    isBackendConfigured ? api<void>("POST", "/auth/sign-out") : mockAuth.signOut(),
+
+  me: () => (isBackendConfigured ? api<Me>("GET", "/auth/me") : mockAuth.me()),
 };

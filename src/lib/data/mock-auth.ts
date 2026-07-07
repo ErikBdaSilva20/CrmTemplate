@@ -7,16 +7,16 @@
 // real auth backend (Better-Auth on the tenant-gateway) exists.
 //
 // ── HOW TO REPLACE WITH REAL AUTH (for the integrating dev) ──────────────────
-// You do NOT touch this file to integrate. Open client.ts and repoint the four
-// `auth` methods (signIn / signUp / signOut / me) at your gateway's endpoints —
-// the same `fetch` pattern already used by `db`. Example:
+// You do NOT need to touch this file OR client.ts to integrate — `auth` in
+// client.ts already auto-switches on `isBackendConfigured`: set
+// `VITE_GATEWAY_URL` and it starts hitting the gateway's `/auth/*` endpoints
+// instead of this mock. See `doc/ALERTA-AUTH-GATEWAY.md` before relying on
+// this in anything beyond local testing — the endpoint paths were written
+// from the documented contract, not verified against a live tenant-gateway.
 //
-//     signIn: (email, password) =>
-//       api<{ ok: true }>("POST", "/auth/sign-in/email", { email, password }),
-//     me: () => api<Me>("GET", "/auth/me"),
-//
-// Once real auth is wired, delete this file. The rest of the app (screens,
-// repos, hooks) is already auth-agnostic and needs no changes.
+// Once verified, this file can stay (unused once a gateway is configured) or
+// be deleted. The rest of the app (screens, repos, hooks) is already
+// auth-agnostic and needs no changes either way.
 //
 // ── WHAT THIS MOCK DOES ──────────────────────────────────────────────────────
 //   • Persists a small user store + the active session in localStorage, so a
@@ -28,7 +28,7 @@
 //   • Seeds one demo admin on first run so you can log in out of the box.
 // =============================================================================
 
-export type Role = "admin" | "manager" | "rep";
+export type Role = 'admin' | 'manager' | 'rep';
 
 export interface Me {
   user: { id: string; email: string; name?: string } | null;
@@ -36,9 +36,9 @@ export interface Me {
 }
 
 // Default admin seeded on first run — documented demo credentials.
-const DEMO_EMAIL = "admin@demo.local";
-const DEMO_PASSWORD = "demo1234";
-const DEMO_NAME = "Admin Demo";
+const DEMO_EMAIL = 'admin@demo.local';
+const DEMO_PASSWORD = 'demo1234';
+const DEMO_NAME = 'Admin Demo';
 
 interface StoredUser {
   id: string;
@@ -48,15 +48,15 @@ interface StoredUser {
   role: Role;
 }
 
-const USERS_KEY = "cellrm.mock.users";
-const SESSION_KEY = "cellrm.mock.session"; // holds the logged-in user id
+const USERS_KEY = 'cellrm.mock.users';
+const SESSION_KEY = 'cellrm.mock.session'; // holds the logged-in user id
 
 // ── Storage layer: localStorage when present, in-memory otherwise ────────────
 const memoryStore = new Map<string, string>();
 
 function hasLocalStorage(): boolean {
   try {
-    return typeof window !== "undefined" && !!window.localStorage;
+    return typeof window !== 'undefined' && !!window.localStorage;
   } catch {
     return false;
   }
@@ -92,7 +92,7 @@ function saveUsers(users: StoredUser[]): void {
 }
 
 function newId(): string {
-  return typeof crypto !== "undefined" && crypto.randomUUID
+  return typeof crypto !== 'undefined' && crypto.randomUUID
     ? `usr_${crypto.randomUUID()}`
     : `usr_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
 }
@@ -101,7 +101,7 @@ function newId(): string {
 function ensureSeeded(): void {
   if (loadUsers().length > 0) return;
   saveUsers([
-    { id: newId(), email: DEMO_EMAIL, name: DEMO_NAME, password: DEMO_PASSWORD, role: "admin" },
+    { id: newId(), email: DEMO_EMAIL, name: DEMO_NAME, password: DEMO_PASSWORD, role: 'admin' },
   ]);
 }
 
@@ -117,7 +117,7 @@ export const mockAuth = {
     const users = loadUsers();
     const user = users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
     if (!user || user.password !== password) {
-      throw new Error("Email ou senha inválidos");
+      throw new Error('Email ou senha inválidos');
     }
     writeRaw(SESSION_KEY, user.id);
     return { ok: true };
@@ -128,10 +128,10 @@ export const mockAuth = {
     const normalizedEmail = email.trim().toLowerCase();
     const users = loadUsers();
     if (users.some((u) => u.email.toLowerCase() === normalizedEmail)) {
-      throw new Error("Já existe uma conta com este email");
+      throw new Error('Já existe uma conta com este email');
     }
     // First user overall is admin; everyone else is rep (mirrors the gateway).
-    const role: Role = users.length === 0 ? "admin" : "rep";
+    const role: Role = users.length === 0 ? 'admin' : 'rep';
     const user: StoredUser = { id: newId(), email: email.trim(), name, password, role };
     saveUsers([...users, user]);
     writeRaw(SESSION_KEY, user.id);
