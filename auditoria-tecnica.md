@@ -25,11 +25,27 @@ Atualmente, o projeto utiliza um sistema customizado de cache em memória (`data
 - **Filtros e Agregações no Cliente:** Todo o comportamento de busca, paginação, filtros por período e soma de valores é feito iterando arrays em memória via JavaScript (`.filter()`, `.reduce()`).
 - **Complexidade no Backend Inexistente:** O backend atua apenas como um repositório de persistência de arrays.
 
+> ✅ **Decisão de arquitetura fechada (2026-07-06).** Mantém-se `data-cache.ts` —
+> **sem** migrar pra TanStack Query. Motivo: o próprio arquivo já documenta essa
+> escolha citando `Importantdoc.md` §B3 ("evite libs pesadas não justificadas"); o
+> gateway não suporta nada que uma lib de query melhoraria (sem filtro/paginação
+> server-side, `Importantdoc.md` §B5); e o optimistic update abaixo já funciona
+> sem essa dependência. `staleTime`/`gcTime` (Fase 2 item 3) não se aplica.
+>
+> ✅ **Optimistic updates já implementado** (pré-existente, confirmado
+> 2026-07-06) — ver Seção abaixo.
+
 ### 💡 O que é executável a partir deste repo (🟢)
 
 O gateway genérico (`/data/:table`) só expõe `list/create/update/remove` — sem query params, sem paginação, sem agregação server-side (`Importantdoc.md` §B5). Migrar para TanStack Query **não** entrega ordenação/paginação/filtragem no servidor aqui, porque não existe servidor de aplicação próprio para isso — só o gateway compartilhado. O que continua válido e executável sem tocar no gateway:
 
 #### Optimistic Updates no Drag-and-Drop do Kanban
+
+> ✅ **Já implementado** — `DealsScreen.tsx` espelha `deals` num state local e
+> `handleDragEnd` atualiza esse state antes de chamar `moveDealToStage` (await),
+> com `refreshDeals()` depois pra reconciliar com o servidor. O mesmo padrão
+> existe em `ContactsScreen.tsx` (`handleStatusChange`) pro funil por status.
+> Nenhuma ação necessária.
 
 Ao arrastar um negócio de um estágio para outro no Kanban (`DealsScreen`), o usuário deve ver o card se mover instantaneamente, sem travar a interface esperando o retorno da API.
 
@@ -174,6 +190,17 @@ src/components/activities/
 
 ## 4. Performance de Renderização em Alta Escala
 
+> ✅ **Concluído (2026-07-06).** `@tanstack/react-virtual` instalado. Hook
+> compartilhado `src/hooks/useVirtualTable.ts` (padrão de linhas
+> "espaçadoras" — `paddingTop`/`paddingBottom` — em vez de posicionamento
+> absoluto, pra preservar o `<table>` semântico do shadcn/ui) usado em
+> `DealsList.tsx` e `ContactsTable.tsx`. Ambas ganharam um container de
+> scroll com altura fixa (`max-h-[70vh]`) e cabeçalho `sticky`. A paginação
+> client-side de `/contacts` foi removida na visão em tabela (a lista
+> inteira filtrada/ordenada agora vive no scroll virtualizado) e mantida só
+> na visão em cartões (grid, não é uma tabela — fora do escopo deste item).
+> `tsc -b`, `vitest` (61/61) e `vite build` limpos.
+
 ### 🔴 O Cenário Atual: Jank e DOM Bloat
 
 A exibição de tabelas com centenas de linhas de contatos (`ContactsScreen.tsx`) ou negócios gera sobrecarga na árvore do DOM. Toda vez que o estado do checkbox geral ou de um seletor muda, o React força a reconciliação de milhares de nós de elementos HTML, gerando micro-travamentos na UI (jank).
@@ -243,12 +270,12 @@ export interface Activity {
 2. ✅ **Implementar Adapters DTO** (concluído 2026-07-06 — ver Seção 2).
 3. ✅ **Substituir switches/ifs por dicionários de lookup** (já existia em `lib/domain.ts` — ver Seção 5).
 
-### 🟡 Fase 2: Gerenciamento de Estado Profissional
+### ✅ Fase 2: Gerenciamento de Estado Profissional — concluída (2026-07-06)
 
-1. ⚠️ **Integrar TanStack Query (React Query):** o benefício real do React Query (sync de filtros/paginação server-side) não existe aqui — o gateway genérico só faz `list/create/update/remove`, sem query params (`Importantdoc.md` §B5). `data-cache.ts` documenta essa decisão de propósito. Trocar por React Query só faria sentido para cache/invalidação client-side + optimistic updates — **decisão de arquitetura a ser tomada com o time antes de codar**, não um ganho automático.
-2. ⏳ **Otimização de Kanban Drag-and-Drop (optimistic updates):** 🟢 executável sem gateway novo — pode ser feito direto sobre `data-cache.ts` ou, se a decisão acima for por React Query, dentro dele. Pendente.
-3. ⚪ **Cache Inteligente (`staleTime`/`gcTime`):** só se aplica se o item 1 for adotado.
+1. ✅ **TanStack Query:** decisão fechada — **não** adotar. Ver nota de decisão na Seção 1.
+2. ✅ **Otimização de Kanban Drag-and-Drop (optimistic updates):** já implementado (pré-existente) em `DealsScreen.tsx`/`ContactsScreen.tsx`. Ver Seção 1.
+3. ✅ **Cache Inteligente (`staleTime`/`gcTime`):** N/A — não se aplica sem React Query.
 
-### 🟢 Fase 3: Virtualização de Listas
+### ✅ Fase 3: Virtualização de Listas — concluída (2026-07-06)
 
-1. ⏳ **Virtualização de Listas (`@tanstack/react-virtual`):** 100% client-side, não depende do gateway — continua válido e pendente de execução.
+1. ✅ **Virtualização de Listas (`@tanstack/react-virtual`):** `DealsList` e `ContactsTable` — ver Seção 4.
