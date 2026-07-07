@@ -1,9 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -12,31 +11,19 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Edit2, X, Phone, Mail, FileText, CheckSquare, CalendarDays,
-  Building2, Briefcase, Save,
+  Edit2, X, Mail, Phone, Building2, Briefcase, Save,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ContactForm, type ContactFormValue } from "@/components/crm/ContactForm";
+import { useDeals } from "@/hooks/useDeals";
+import { useStages } from "@/hooks/usePipelines";
+import { invalidateActivities } from "@/hooks/useActivities";
+import { ACTIVITY_TYPE, ACTIVITY_TYPES, CONTACT_STATUS, DEAL_STATUS } from "@/lib/domain";
 import {
   updateContact, listActivitiesByContact, createActivity,
-  listDeals, listStages,
-  type Contact, type Company, type Deal, type Activity, type PipelineStage,
-  type ContactStatus, type ActivityType,
+  type Contact, type Company, type Activity, type ActivityType,
 } from "@/lib/data";
 import { formatCurrency, formatDate, formatDateTime, formatDateShort } from "@/lib/format";
-
-const statusColors: Record<ContactStatus, string> = {
-  lead: "bg-primary/10 text-primary", prospect: "bg-warning/10 text-warning",
-  customer: "bg-success/10 text-success", churned: "bg-destructive/10 text-destructive",
-};
-const statusLabels: Record<ContactStatus, string> = {
-  lead: "Lead", prospect: "Prospect", customer: "Cliente", churned: "Churned",
-};
-const activityIcons: Record<ActivityType, React.ComponentType<{ className?: string }>> = {
-  call: Phone, email: Mail, meeting: CalendarDays, note: FileText, task: CheckSquare,
-};
-const activityLabels: Record<ActivityType, string> = {
-  call: "Ligação", email: "Email", meeting: "Reunião", note: "Nota", task: "Tarefa",
-};
 
 interface ContactDrawerProps {
   contact: Contact | null;
@@ -45,42 +32,59 @@ interface ContactDrawerProps {
   companies: Company[];
 }
 
+function toFormValue(contact: Contact): ContactFormValue {
+  return {
+    first_name: contact.first_name,
+    last_name: contact.last_name || "",
+    email: contact.email || "",
+    phone: contact.phone || "",
+    title: contact.title || "",
+    linkedin_url: contact.linkedin_url || "",
+    status: contact.status || "lead",
+    company_id: contact.company_id || "",
+  };
+}
+
 export function ContactDrawer({ contact, onClose, onUpdate, companies }: ContactDrawerProps) {
+  const { data: deals } = useDeals();
+  const { data: stages } = useStages();
+
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<Partial<Contact>>({});
+  const [form, setForm] = useState<ContactFormValue>(() => contact ? toFormValue(contact) : {
+    first_name: "", last_name: "", email: "", phone: "", title: "",
+    linkedin_url: "", status: "lead", company_id: "",
+  });
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [stages, setStages] = useState<PipelineStage[]>([]);
   const [activityForm, setActivityForm] = useState({ type: "note" as ActivityType, title: "", body: "" });
 
-  // Sem join: busca relacionados e filtra no front (§B5).
-  const fetchRelated = useCallback(async () => {
+  const contactDeals = useMemo(
+    () => (contact ? deals.filter((d) => d.contact_id === contact.id) : []),
+    [deals, contact],
+  );
+
+  // Sem join: busca atividades e filtra deals/estágios no front (§B5).
+  const fetchActivities = useCallback(async () => {
     if (!contact) return;
-    const [acts, allDeals, allStages] = await Promise.all([
-      listActivitiesByContact(contact.id),
-      listDeals(),
-      listStages(),
-    ]);
+    const acts = await listActivitiesByContact(contact.id);
     setActivities([...acts].sort((a, b) => (b.created_at || "").localeCompare(a.created_at || "")));
-    setDeals(allDeals.filter((d) => d.contact_id === contact.id));
-    setStages(allStages);
   }, [contact]);
 
   useEffect(() => {
     if (contact) {
-      setForm(contact);
+      setForm(toFormValue(contact));
       setEditing(false);
-      fetchRelated();
+      fetchActivities();
     }
-  }, [contact, fetchRelated]);
+  }, [contact, fetchActivities]);
 
   const handleSave = async () => {
     if (!contact) return;
     try {
       await updateContact(contact.id, {
-        first_name: form.first_name, last_name: form.last_name, email: form.email,
-        phone: form.phone, title: form.title, status: form.status as ContactStatus,
-        linkedin_url: form.linkedin_url, company_id: form.company_id || null,
+        first_name: form.first_name, last_name: form.last_name || null,
+        email: form.email || null, phone: form.phone || null, title: form.title || null,
+        status: form.status, linkedin_url: form.linkedin_url || null,
+        company_id: form.company_id || null,
       });
       setEditing(false);
       onUpdate();
@@ -99,7 +103,8 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies }: Contact
         title: activityForm.title, body: activityForm.body || null,
       });
       setActivityForm({ type: "note", title: "", body: "" });
-      fetchRelated();
+      fetchActivities();
+      invalidateActivities();
       toast.success("Atividade adicionada");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao adicionar atividade");
@@ -123,8 +128,8 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies }: Contact
               <h2 className="text-lg font-bold">{contact.first_name} {contact.last_name}</h2>
               {contact.title && <p className="text-sm text-muted-foreground">{contact.title}</p>}
               <div className="mt-1.5 flex items-center gap-2">
-                <Badge variant="secondary" className={statusColors[contact.status || "lead"]}>
-                  {statusLabels[contact.status || "lead"]}
+                <Badge variant="secondary" className={CONTACT_STATUS[contact.status || "lead"].badgeClassName}>
+                  {CONTACT_STATUS[contact.status || "lead"].label}
                 </Badge>
               </div>
             </div>
@@ -146,42 +151,7 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies }: Contact
           <TabsContent value="overview" className="mt-4 space-y-4">
             {editing ? (
               <div className="space-y-3">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1"><Label className="text-xs">Nome</Label>
-                    <Input value={form.first_name || ""} onChange={(e) => setForm({ ...form, first_name: e.target.value })} /></div>
-                  <div className="space-y-1"><Label className="text-xs">Sobrenome</Label>
-                    <Input value={form.last_name || ""} onChange={(e) => setForm({ ...form, last_name: e.target.value })} /></div>
-                </div>
-                <div className="space-y-1"><Label className="text-xs">Email</Label>
-                  <Input type="email" value={form.email || ""} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-                <div className="space-y-1"><Label className="text-xs">Telefone</Label>
-                  <Input value={form.phone || ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
-                <div className="space-y-1"><Label className="text-xs">Cargo</Label>
-                  <Input value={form.title || ""} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
-                <div className="space-y-1"><Label className="text-xs">LinkedIn</Label>
-                  <Input value={form.linkedin_url || ""} onChange={(e) => setForm({ ...form, linkedin_url: e.target.value })} /></div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Status</Label>
-                  <Select value={form.status || "lead"} onValueChange={(v) => setForm({ ...form, status: v as ContactStatus })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="lead">Lead</SelectItem>
-                      <SelectItem value="prospect">Prospect</SelectItem>
-                      <SelectItem value="customer">Cliente</SelectItem>
-                      <SelectItem value="churned">Churned</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Empresa</Label>
-                  <Select value={form.company_id || "none"} onValueChange={(v) => setForm({ ...form, company_id: v === "none" ? null : v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhuma</SelectItem>
-                      {companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <ContactForm value={form} onChange={(patch) => setForm({ ...form, ...patch })} companies={companies} />
                 <Button onClick={handleSave} className="w-full"><Save className="mr-2 h-4 w-4" />Salvar</Button>
               </div>
             ) : (
@@ -234,11 +204,9 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies }: Contact
                 <Select value={activityForm.type} onValueChange={(v) => setActivityForm({ ...activityForm, type: v as ActivityType })}>
                   <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="note">Nota</SelectItem>
-                    <SelectItem value="call">Ligação</SelectItem>
-                    <SelectItem value="email">Email</SelectItem>
-                    <SelectItem value="meeting">Reunião</SelectItem>
-                    <SelectItem value="task">Tarefa</SelectItem>
+                    {ACTIVITY_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>{ACTIVITY_TYPE[t].label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <Input className="h-8 text-sm" placeholder="Título" value={activityForm.title} onChange={(e) => setActivityForm({ ...activityForm, title: e.target.value })} />
@@ -248,7 +216,7 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies }: Contact
             </div>
             <div className="space-y-2">
               {activities.map((a) => {
-                const Icon = activityIcons[a.type];
+                const Icon = ACTIVITY_TYPE[a.type].icon;
                 return (
                   <div key={a.id} className="flex gap-3 rounded-lg border border-border p-3">
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
@@ -256,7 +224,7 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies }: Contact
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-[10px] font-medium text-muted-foreground uppercase">{activityLabels[a.type]}</span>
+                        <span className="text-[10px] font-medium text-muted-foreground uppercase">{ACTIVITY_TYPE[a.type].label}</span>
                         <span className="text-[10px] text-muted-foreground">
                           {formatDateTime(a.created_at)}
                         </span>
@@ -273,7 +241,7 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies }: Contact
 
           {/* Deals */}
           <TabsContent value="deals" className="mt-4 space-y-2">
-            {deals.map((d) => {
+            {contactDeals.map((d) => {
               const stage = stages.find((s) => s.id === d.stage_id);
               return (
                 <Card key={d.id}>
@@ -287,20 +255,20 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies }: Contact
                               {stage.name}
                             </Badge>
                           )}
-                          <Badge variant="secondary" className={`text-[10px] ${d.status === "won" ? "bg-success/10 text-success" : d.status === "lost" ? "bg-destructive/10 text-destructive" : ""}`}>
-                            {d.status === "open" ? "Aberto" : d.status === "won" ? "Ganho" : "Perdido"}
+                          <Badge variant="secondary" className={`text-[10px] ${DEAL_STATUS[d.status || "open"].badgeClassName}`}>
+                            {DEAL_STATUS[d.status || "open"].label}
                           </Badge>
                         </div>
                       </div>
                       <span className="text-sm font-bold text-primary">
-                        {formatCurrency(Number(d.value) || 0, d.currency || "BRL")}
+                        {formatCurrency(d.value, d.currency || "BRL")}
                       </span>
                     </div>
                   </CardContent>
                 </Card>
               );
             })}
-            {deals.length === 0 && <p className="text-center text-sm text-muted-foreground py-6">Nenhum negócio vinculado</p>}
+            {contactDeals.length === 0 && <p className="text-center text-sm text-muted-foreground py-6">Nenhum negócio vinculado</p>}
           </TabsContent>
 
           {/* Notes */}

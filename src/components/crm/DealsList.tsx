@@ -1,25 +1,25 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ArrowUpDown, Trophy, XCircle, Trash2, AlertTriangle } from "lucide-react";
+import { Trophy, XCircle, Trash2, AlertTriangle } from "lucide-react";
 import type { DealWithRelations, PipelineStage } from "@/lib/data";
-import { formatCurrency, formatDate, daysUntil } from "@/lib/format";
+import { DEAL_STATUS } from "@/lib/domain";
+import { formatCurrency, formatMonthYear, monthsUntil } from "@/lib/format";
+import { BantBadge } from "@/components/crm/BantBadge";
+import { SortHeader } from "@/components/crm/SortHeader";
+import { useVirtualTable } from "@/hooks/useVirtualTable";
+import { isAllSelected, toggleSetAll, toggleSetOne } from "@/lib/selection";
+
+const COLUMN_COUNT = 8;
 
 type Stage = PipelineStage;
 
-type SortKey = "title" | "value" | "close_date" | "probability" | "status" | "created_at";
+type SortKey = "title" | "value" | "close_date" | "probability" | "status" | "created_at" | "qualification_score";
 type SortDir = "asc" | "desc";
-
-const statusLabels = { open: "Aberto", won: "Ganho", lost: "Perdido" };
-const statusColors = {
-  open: "bg-primary/10 text-primary",
-  won: "bg-success/10 text-success",
-  lost: "bg-destructive/10 text-destructive",
-};
 
 interface DealsListProps {
   deals: DealWithRelations[];
@@ -41,41 +41,31 @@ export function DealsList({
     else { setSortKey(key); setSortDir("asc"); }
   };
 
-  const sorted = [...deals].sort((a, b) => {
+  const sorted = useMemo(() => [...deals].sort((a, b) => {
     let cmp = 0;
     switch (sortKey) {
       case "title": cmp = (a.title || "").localeCompare(b.title || ""); break;
-      case "value": cmp = (Number(a.value) || 0) - (Number(b.value) || 0); break;
-      case "probability": cmp = (Number(a.probability) || 0) - (Number(b.probability) || 0); break;
+      case "value": cmp = a.value - b.value; break;
+      case "probability": cmp = a.probability - b.probability; break;
       case "close_date": cmp = (a.close_date || "").localeCompare(b.close_date || ""); break;
       case "status": cmp = (a.status || "").localeCompare(b.status || ""); break;
       case "created_at": cmp = (a.created_at || "").localeCompare(b.created_at || ""); break;
+      case "qualification_score": cmp = (a.qualification_score ?? 0) - (b.qualification_score ?? 0); break;
     }
     return sortDir === "asc" ? cmp : -cmp;
-  });
+  }), [deals, sortKey, sortDir]);
 
-  const allSelected = sorted.length > 0 && sorted.every((d) => selectedDeals.has(d.id));
-  const toggleAll = () => {
-    if (allSelected) onSelectionChange(new Set());
-    else onSelectionChange(new Set(sorted.map((d) => d.id)));
-  };
-  const toggleOne = (id: string) => {
-    const next = new Set(selectedDeals);
-    next.has(id) ? next.delete(id) : next.add(id);
-    onSelectionChange(next);
-  };
+  const sortedIds = useMemo(() => sorted.map((d) => d.id), [sorted]);
+  const allSelected = isAllSelected(selectedDeals, sortedIds);
+  const toggleAll = () => onSelectionChange(toggleSetAll(selectedDeals, sortedIds));
+  const toggleOne = (id: string) => onSelectionChange(toggleSetOne(selectedDeals, id));
 
   const getStageName = (stageId: string | null) => {
     if (!stageId) return "—";
     return stages.find((s) => s.id === stageId)?.name || "—";
   };
 
-  const SortHeader = ({ label, field }: { label: string; field: SortKey }) => (
-    <button onClick={() => toggleSort(field)} className="flex items-center gap-1 hover:text-foreground transition-colors">
-      {label}
-      <ArrowUpDown className="h-3 w-3" />
-    </button>
-  );
+  const { scrollRef, rows, paddingTop, paddingBottom } = useVirtualTable({ count: sorted.length });
 
   return (
     <div className="space-y-3">
@@ -94,28 +84,33 @@ export function DealsList({
         </div>
       )}
 
-      <div className="rounded-md border border-border overflow-x-auto">
+      <div ref={scrollRef} className="rounded-md border border-border overflow-auto max-h-[70vh]">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
               <TableHead className="w-10">
                 <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Selecionar todos" />
               </TableHead>
-              <TableHead><SortHeader label="Título" field="title" /></TableHead>
-              <TableHead><SortHeader label="Valor" field="value" /></TableHead>
+              <TableHead><SortHeader label="Título" field="title" onSort={toggleSort} /></TableHead>
+              <TableHead><SortHeader label="Valor" field="value" onSort={toggleSort} /></TableHead>
               <TableHead className="hidden md:table-cell">Estágio</TableHead>
-              <TableHead className="hidden lg:table-cell"><SortHeader label="Probabilidade" field="probability" /></TableHead>
-              <TableHead className="hidden sm:table-cell"><SortHeader label="Fechamento" field="close_date" /></TableHead>
-              <TableHead><SortHeader label="Status" field="status" /></TableHead>
+              <TableHead className="hidden lg:table-cell"><SortHeader label="Probabilidade" field="probability" onSort={toggleSort} /></TableHead>
+              <TableHead className="hidden xl:table-cell"><SortHeader label="BANT" field="qualification_score" onSort={toggleSort} /></TableHead>
+              <TableHead className="hidden sm:table-cell"><SortHeader label="Fechamento" field="close_date" onSort={toggleSort} /></TableHead>
+              <TableHead><SortHeader label="Status" field="status" onSort={toggleSort} /></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sorted.map((deal) => {
-              const daysUntilClose = deal.close_date ? daysUntil(deal.close_date) : null;
-              const isUrgent = daysUntilClose !== null && daysUntilClose < 7 && daysUntilClose >= 0;
+            {paddingTop > 0 && (
+              <tr><td colSpan={COLUMN_COUNT} style={{ height: paddingTop }} /></tr>
+            )}
+            {rows.map(({ index, key }) => {
+              const deal = sorted[index];
+              const monthsToClose = deal.close_date ? monthsUntil(deal.close_date) : null;
+              const isUrgent = monthsToClose !== null && monthsToClose <= 0;
 
               return (
-                <TableRow key={deal.id} className="cursor-pointer" onClick={() => onDealClick(deal)}>
+                <TableRow key={key} className="cursor-pointer" onClick={() => onDealClick(deal)}>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <Checkbox checked={selectedDeals.has(deal.id)} onCheckedChange={() => toggleOne(deal.id)} />
                   </TableCell>
@@ -126,7 +121,7 @@ export function DealsList({
                     </div>
                   </TableCell>
                   <TableCell className="font-semibold text-primary">
-                    {formatCurrency(Number(deal.value) || 0, deal.currency || "BRL")}
+                    {formatCurrency(deal.value, deal.currency || "BRL")}
                   </TableCell>
                   <TableCell className="text-muted-foreground hidden md:table-cell">{getStageName(deal.stage_id)}</TableCell>
                   <TableCell className="hidden lg:table-cell">
@@ -134,25 +129,31 @@ export function DealsList({
                       <Badge variant="secondary" className="text-xs">{deal.probability}%</Badge>
                     )}
                   </TableCell>
+                  <TableCell className="hidden xl:table-cell">
+                    <BantBadge score={deal.qualification_score} />
+                  </TableCell>
                   <TableCell className="hidden sm:table-cell">
                     {deal.close_date ? (
-                      <div className={`flex items-center gap-1 text-sm ${isUrgent ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                      <div className={`flex items-center gap-1 text-sm capitalize ${isUrgent ? "text-destructive font-medium" : "text-muted-foreground"}`}>
                         {isUrgent && <AlertTriangle className="h-3 w-3" />}
-                        {formatDate(deal.close_date)}
+                        {formatMonthYear(deal.close_date)}
                       </div>
                     ) : "—"}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary" className={statusColors[deal.status || "open"]}>
-                      {statusLabels[deal.status || "open"]}
+                    <Badge variant="secondary" className={DEAL_STATUS[deal.status || "open"].badgeClassName}>
+                      {DEAL_STATUS[deal.status || "open"].label}
                     </Badge>
                   </TableCell>
                 </TableRow>
               );
             })}
+            {paddingBottom > 0 && (
+              <tr><td colSpan={COLUMN_COUNT} style={{ height: paddingBottom }} /></tr>
+            )}
             {sorted.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={COLUMN_COUNT} className="py-10 text-center text-muted-foreground">
                   Nenhum negócio encontrado
                 </TableCell>
               </TableRow>

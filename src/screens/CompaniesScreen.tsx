@@ -1,8 +1,7 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -12,16 +11,34 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, LayoutGrid, List, Filter, ArrowUpDown, Upload, Download,
-  Trash2, ChevronLeft, ChevronRight, X, Building2,
+  Plus, LayoutGrid, List, Filter, Upload, Download,
+  Trash2, ChevronLeft, ChevronRight, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { CompanyDrawer } from "@/components/crm/CompanyDrawer";
 import { CompanyCreateModal } from "@/components/crm/CompanyCreateModal";
+import { CompanyLogo } from "@/components/crm/CompanyLogo";
 import { CSVImportModal } from "@/components/crm/CSVImportModal";
+import { PeriodSelect } from "@/components/crm/PeriodSelect";
+import { SortHeader } from "@/components/crm/SortHeader";
 import { COMPANY_SIZES } from "@/lib/constants";
-import { listCompanies, deleteCompany, type Company } from "@/lib/data";
+import { useCompanies } from "@/hooks/useCompanies";
+import { roleAtLeast, useAuth } from "@/lib/auth";
+import { deleteCompany, type Company } from "@/lib/data";
 import { formatCurrencyCompact, formatDate } from "@/lib/format";
+import { exportToCsv, type CsvColumn } from "@/lib/csv";
+import { isInInterval, resolvePeriod, type Period } from "@/lib/period";
+import { runBatch, reportBatchResult } from "@/lib/batch";
+import { isAllSelected, toggleSetAll, toggleSetOne } from "@/lib/selection";
+
+const EXPORT_COLUMNS: CsvColumn<Company>[] = [
+  { label: "Nome", accessor: (c) => c.name },
+  { label: "Domínio", accessor: (c) => c.domain },
+  { label: "Indústria", accessor: (c) => c.industry },
+  { label: "Tamanho", accessor: (c) => c.size },
+  { label: "Receita", accessor: (c) => c.revenue },
+  { label: "Website", accessor: (c) => c.website },
+];
 
 type SortKey = "name" | "domain" | "industry" | "size" | "revenue" | "created_at";
 type SortDir = "asc" | "desc";
@@ -33,17 +50,31 @@ interface CompanyFilters {
   size?: string;
 }
 
+// "Tudo" preserva o comportamento atual (zero filtro de data) até o
+// usuário escolher um Período — Companies nunca teve filtro de data antes
+// desta feature (FR-13), então não há regressão a evitar.
+const DEFAULT_PERIOD: Period = { kind: "preset", preset: "all" };
+
 export default function CompaniesScreen() {
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const { role } = useAuth();
+  // Exclusão em lote é destrutiva e irreversível — mesmo gate de config
+  // estrutural (admin/manager), espelhando ContactsScreen.
+  const canDelete = roleAtLeast(role, "manager");
+
+  const { data: companiesRaw, refresh: refreshCompanies } = useCompanies();
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(0);
   const [filters, setFilters] = useState<CompanyFilters>({});
+  const [period, setPeriod] = useState<Period>(DEFAULT_PERIOD);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCompanies, setSelectedCompanies] = useState<Set<string>>(new Set());
 
-  const [drawerCompany, setDrawerCompany] = useState<Company | null>(null);
+  // Guarda só o id e deriva a empresa ao vivo da cache — evita o Sheet
+  // mostrar dados velhos logo após salvar (o objeto ficava congelado no
+  // momento em que o Sheet foi aberto).
+  const [drawerCompanyId, setDrawerCompanyId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -56,27 +87,32 @@ export default function CompaniesScreen() {
     }
   }, [searchParams, setSearchParams]);
 
-  // Sem org_id, sem join, sem realtime — o gateway isola por tenant.
-  const fetchData = useCallback(async () => {
-    const data = await listCompanies();
-    setCompanies(
-      [...data].sort((a, b) => (b.created_at || "").localeCompare(a.created_at || "")),
-    );
-  }, []);
+  const companies = useMemo(
+    () => [...companiesRaw].sort((a, b) => (b.created_at || "").localeCompare(a.created_at || "")),
+    [companiesRaw],
+  );
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const drawerCompany = useMemo(
+    () => (drawerCompanyId ? companies.find((c) => c.id === drawerCompanyId) ?? null : null),
+    [companies, drawerCompanyId],
+  );
 
   const industries = useMemo(() => {
     return [...new Set(companies.map((c) => c.industry).filter(Boolean))] as string[];
   }, [companies]);
 
+  // Resolve o Período uma vez por mudança de seleção — camada compartilhada
+  // (src/lib/period.ts), não uma sexta implementação de filtro de data.
+  const periodInterval = useMemo(() => resolvePeriod(period), [period]);
+
   const filtered = useMemo(() => {
     return companies.filter((c) => {
       if (filters.industry && c.industry !== filters.industry) return false;
       if (filters.size && c.size !== filters.size) return false;
+      if (!isInInterval(c.created_at, periodInterval)) return false;
       return true;
     });
-  }, [companies, filters]);
+  }, [companies, filters, periodInterval]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -86,7 +122,7 @@ export default function CompaniesScreen() {
         case "domain": cmp = (a.domain || "").localeCompare(b.domain || ""); break;
         case "industry": cmp = (a.industry || "").localeCompare(b.industry || ""); break;
         case "size": cmp = (a.size || "").localeCompare(b.size || ""); break;
-        case "revenue": cmp = (Number(a.revenue) || 0) - (Number(b.revenue) || 0); break;
+        case "revenue": cmp = (a.revenue ?? 0) - (b.revenue ?? 0); break;
         case "created_at": cmp = (a.created_at || "").localeCompare(b.created_at || ""); break;
       }
       return sortDir === "asc" ? cmp : -cmp;
@@ -101,46 +137,28 @@ export default function CompaniesScreen() {
     else { setSortKey(key); setSortDir("asc"); }
   };
 
-  const allSelected = paginated.length > 0 && paginated.every((c) => selectedCompanies.has(c.id));
-  const toggleAll = () => {
-    if (allSelected) setSelectedCompanies(new Set());
-    else setSelectedCompanies(new Set(paginated.map((c) => c.id)));
-  };
-  const toggleOne = (id: string) => {
-    const next = new Set(selectedCompanies);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    setSelectedCompanies(next);
-  };
+  const paginatedIds = useMemo(() => paginated.map((c) => c.id), [paginated]);
+  const allSelected = isAllSelected(selectedCompanies, paginatedIds);
+  const toggleAll = () => setSelectedCompanies((prev) => toggleSetAll(prev, paginatedIds));
+  const toggleOne = (id: string) => setSelectedCompanies((prev) => toggleSetOne(prev, id));
 
   const batchDelete = async () => {
     const ids = Array.from(selectedCompanies);
-    await Promise.all(ids.map((id) => deleteCompany(id)));
-    setSelectedCompanies(new Set());
-    fetchData();
-    toast.success(`${ids.length} empresas excluídas`);
+    const result = await runBatch(ids, deleteCompany);
+    setSelectedCompanies(new Set(result.failed.map((f) => f.id)));
+    refreshCompanies();
+    reportBatchResult(result, {
+      success: (n) => `${n} empresas excluídas`,
+      failure: (n) => `${n} empresas não puderam ser excluídas`,
+    });
   };
 
   const exportCSV = () => {
-    const rows = sorted.map((c) => ({
-      Nome: c.name, "Domínio": c.domain || "", "Indústria": c.industry || "",
-      Tamanho: c.size || "", Receita: c.revenue || "", Website: c.website || "",
-    }));
-    const headers = Object.keys(rows[0] || {});
-    const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => `"${(r as Record<string, unknown>)[h] || ""}"`).join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "empresas.csv"; a.click();
-    URL.revokeObjectURL(url);
+    exportToCsv(sorted, EXPORT_COLUMNS, "empresas.csv");
     toast.success("CSV exportado");
   };
 
   const formatRevenue = (v: number | null) => v ? formatCurrencyCompact(v) : "—";
-
-  const SortHeader = ({ label, field }: { label: string; field: SortKey }) => (
-    <button onClick={() => toggleSort(field)} className="flex items-center gap-1 hover:text-foreground transition-colors">
-      {label}<ArrowUpDown className="h-3 w-3" />
-    </button>
-  );
 
   return (
     <div className="space-y-4">
@@ -161,11 +179,11 @@ export default function CompaniesScreen() {
           <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} aria-label="Alternar filtros">
             <Filter className="mr-1 h-3.5 w-3.5" /><span className="hidden sm:inline">Filtros</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setCsvOpen(true)} aria-label="Importar CSV" className="hidden sm:flex">
-            <Upload className="mr-1.5 h-3.5 w-3.5" />Importar
+          <Button variant="outline" size="sm" onClick={() => setCsvOpen(true)} aria-label="Importar CSV">
+            <Upload className="sm:mr-1.5 h-3.5 w-3.5" /><span className="hidden sm:inline">Importar</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={exportCSV} aria-label="Exportar CSV" className="hidden sm:flex">
-            <Download className="mr-1.5 h-3.5 w-3.5" />Exportar
+          <Button variant="outline" size="sm" onClick={exportCSV} aria-label="Exportar CSV">
+            <Download className="sm:mr-1.5 h-3.5 w-3.5" /><span className="hidden sm:inline">Exportar</span>
           </Button>
           <Button onClick={() => setCreateOpen(true)} aria-label="Criar nova empresa">
             <Plus className="mr-1 sm:mr-2 h-4 w-4" /><span className="hidden sm:inline">Nova Empresa</span><span className="sm:hidden">Nova</span>
@@ -195,8 +213,20 @@ export default function CompaniesScreen() {
               </SelectContent>
             </Select>
           </div>
-          {Object.values(filters).some(Boolean) && (
-            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setFilters({})}>
+          <div className="space-y-1">
+            <Label className="text-xs">Criado em</Label>
+            <PeriodSelect value={period} onChange={setPeriod} />
+          </div>
+          {(Object.values(filters).some(Boolean) || period.kind !== "preset" || period.preset !== "all") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => {
+                setFilters({});
+                setPeriod(DEFAULT_PERIOD);
+              }}
+            >
               <X className="mr-1 h-3 w-3" />Limpar
             </Button>
           )}
@@ -206,9 +236,11 @@ export default function CompaniesScreen() {
       {selectedCompanies.size > 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 p-2">
           <span className="text-sm font-medium">{selectedCompanies.size} selecionadas</span>
-          <Button size="sm" variant="destructive" onClick={batchDelete}>
-            <Trash2 className="mr-1 h-3.5 w-3.5" />Excluir
-          </Button>
+          {canDelete && (
+            <Button size="sm" variant="destructive" onClick={batchDelete}>
+              <Trash2 className="mr-1 h-3.5 w-3.5" />Excluir
+            </Button>
+          )}
         </div>
       )}
 
@@ -218,43 +250,30 @@ export default function CompaniesScreen() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10"><Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Selecionar todas" /></TableHead>
-                <TableHead><SortHeader label="Empresa" field="name" /></TableHead>
-                <TableHead className="hidden sm:table-cell"><SortHeader label="Domínio" field="domain" /></TableHead>
-                <TableHead className="hidden md:table-cell"><SortHeader label="Indústria" field="industry" /></TableHead>
-                <TableHead className="hidden lg:table-cell"><SortHeader label="Tamanho" field="size" /></TableHead>
-                <TableHead className="hidden lg:table-cell"><SortHeader label="Receita" field="revenue" /></TableHead>
-                <TableHead className="hidden md:table-cell"><SortHeader label="Criado em" field="created_at" /></TableHead>
+                <TableHead><SortHeader label="Empresa" field="name" onSort={toggleSort} /></TableHead>
+                <TableHead className="hidden sm:table-cell"><SortHeader label="Domínio" field="domain" onSort={toggleSort} /></TableHead>
+                <TableHead className="hidden md:table-cell"><SortHeader label="Indústria" field="industry" onSort={toggleSort} /></TableHead>
+                <TableHead className="hidden lg:table-cell"><SortHeader label="Tamanho" field="size" onSort={toggleSort} /></TableHead>
+                <TableHead className="hidden lg:table-cell"><SortHeader label="Receita" field="revenue" onSort={toggleSort} /></TableHead>
+                <TableHead className="hidden md:table-cell"><SortHeader label="Criado em" field="created_at" onSort={toggleSort} /></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginated.map((c) => (
-                <TableRow key={c.id} className="cursor-pointer" onClick={() => setDrawerCompany(c)}>
+                <TableRow key={c.id} className="cursor-pointer" onClick={() => setDrawerCompanyId(c.id)}>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <Checkbox checked={selectedCompanies.has(c.id)} onCheckedChange={() => toggleOne(c.id)} />
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      {c.domain ? (
-                        <img
-                          src={`https://logo.clearbit.com/${c.domain}`}
-                          alt=""
-                          className="h-8 w-8 rounded-md bg-muted object-contain"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                        />
-                      ) : (
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                            <Building2 className="h-4 w-4" />
-                          </AvatarFallback>
-                        </Avatar>
-                      )}
+                      <CompanyLogo domain={c.domain} className="h-8 w-8 rounded-md" iconClassName="h-4 w-4" />
                       <span className="font-medium">{c.name}</span>
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground hidden sm:table-cell">{c.domain}</TableCell>
                   <TableCell className="text-muted-foreground hidden md:table-cell">{c.industry}</TableCell>
                   <TableCell className="text-muted-foreground hidden lg:table-cell">{c.size}</TableCell>
-                  <TableCell className="text-muted-foreground hidden lg:table-cell">{formatRevenue(Number(c.revenue))}</TableCell>
+                  <TableCell className="text-muted-foreground hidden lg:table-cell">{formatRevenue(c.revenue)}</TableCell>
                   <TableCell className="text-muted-foreground text-xs hidden md:table-cell">
                     {formatDate(c.created_at)}
                   </TableCell>
@@ -271,21 +290,17 @@ export default function CompaniesScreen() {
       {viewMode === "cards" && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
           {paginated.map((c) => (
-            <Card key={c.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setDrawerCompany(c)}>
+            <Card key={c.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setDrawerCompanyId(c.id)}>
               <CardContent className="p-4 space-y-2">
                 <div className="flex items-center gap-3">
-                  {c.domain ? (
-                    <img src={`https://logo.clearbit.com/${c.domain}`} alt="" className="h-10 w-10 rounded-md bg-muted object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                  ) : (
-                    <Avatar className="h-10 w-10"><AvatarFallback className="bg-primary/10 text-primary"><Building2 className="h-5 w-5" /></AvatarFallback></Avatar>
-                  )}
+                  <CompanyLogo domain={c.domain} className="h-10 w-10 rounded-md" iconClassName="h-5 w-5" />
                   <div className="overflow-hidden">
                     <p className="font-medium truncate">{c.name}</p>
                     {c.industry && <p className="text-xs text-muted-foreground truncate">{c.industry}</p>}
                   </div>
                 </div>
                 {c.domain && <p className="text-xs text-muted-foreground">{c.domain}</p>}
-                {c.revenue && <p className="text-sm font-semibold text-primary">{formatRevenue(Number(c.revenue))}</p>}
+                {c.revenue && <p className="text-sm font-semibold text-primary">{formatRevenue(c.revenue)}</p>}
               </CardContent>
             </Card>
           ))}
@@ -303,9 +318,9 @@ export default function CompaniesScreen() {
         </div>
       )}
 
-      <CompanyDrawer company={drawerCompany} onClose={() => setDrawerCompany(null)} onUpdate={fetchData} />
-      <CompanyCreateModal open={createOpen} onOpenChange={setCreateOpen} onCreated={fetchData} />
-      <CSVImportModal open={csvOpen} onOpenChange={setCsvOpen} onImported={fetchData} entityType="companies" />
+      <CompanyDrawer company={drawerCompany} onClose={() => setDrawerCompanyId(null)} onUpdate={refreshCompanies} />
+      <CompanyCreateModal open={createOpen} onOpenChange={setCreateOpen} onCreated={refreshCompanies} />
+      <CSVImportModal open={csvOpen} onOpenChange={setCsvOpen} onImported={refreshCompanies} entityType="companies" />
     </div>
   );
 }

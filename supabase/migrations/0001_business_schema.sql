@@ -1,5 +1,5 @@
 -- =============================================================================
--- FlowCRM → template MasIA — schema de negócio (Onda 1 / V1)
+-- CellRM → template MasIA — schema de negócio (Onda 1 / V1)
 -- Roda no Neon do tenant, DEPOIS que o gateway cria as tabelas do Better-Auth.
 --
 -- Regras seguidas à risca (Importantdoc §B4):
@@ -11,7 +11,32 @@
 --   • id uuid PK + created_at/updated_at; updated_at via trigger touch_updated_at.
 --   • Lookups (config read-only pro rep): SEM owner_id — pipelines, pipeline_stages,
 --     tags, loss_reasons.
+--
+-- ── COMO RODAR ISTO NO POSTGRES LOCAL (docker-compose.yml) ───────────────────
+-- Suba o container (`docker compose up -d`) e aplique este arquivo com:
+--
+--     docker compose exec -T db psql -U masia -d tenant_local < supabase/migrations/0001_business_schema.sql
+--
+-- (rode a partir da raiz do projeto; `db` é o nome do serviço no docker-compose.yml,
+-- não depende do container_name). Idempotente — pode rodar de novo sem quebrar
+-- (`create table if not exists` / `do $$ ... exception when duplicate_object`).
 -- =============================================================================
+
+-- =============================================================================
+-- ⚠️ STUB SÓ PARA LOCAL — tabela "user" do Better-Auth.
+-- Em produção (Neon do tenant) essa tabela já existe: o gateway a cria ANTES
+-- desta migration rodar (ver cabeçalho acima). O docker-compose.yml deste repo
+-- sobe só o Postgres, sem gateway — sem isto, toda FK `owner_id references
+-- "user"(id)` abaixo falharia com "relation user does not exist".
+-- NÃO rode este bloco contra o Neon/staging/produção: lá a tabela real do
+-- Better-Auth já existe e tem colunas adicionais que este stub não replica.
+-- =============================================================================
+create table if not exists "user" (
+  id         text primary key,
+  email      text,
+  name       text,
+  created_at timestamptz not null default now()
+);
 
 -- ---------- Enums de domínio (lowercase, ok no modo genérico) ----------
 do $$ begin
@@ -69,6 +94,11 @@ create table if not exists tags (
   created_at timestamptz not null default now()
 );
 
+-- Removida acidentalmente do commit b57aaa7 ("enhance deal qualification and
+-- loss reporting workflows") — a tabela continuou em types.gen.ts e é lida
+-- por lookups.repo.ts/useLossReasons.ts/SystemRequirementsWidget.tsx (seed
+-- inicial de motivos de perda), então a migration ficou desatualizada em
+-- relação ao modelo real. Restaurada com a forma exata de antes da remoção.
 create table if not exists loss_reasons (
   id          uuid primary key default gen_random_uuid(),
   label       text not null,
@@ -206,18 +236,14 @@ drop trigger if exists trg_sales_goals_touch on sales_goals;
 create trigger trg_sales_goals_touch before update on sales_goals
   for each row execute function touch_updated_at();
 
--- Filtros salvos por usuário (era created_by → owner_id).
-create table if not exists segments (
-  id          uuid primary key default gen_random_uuid(),
-  owner_id    text not null references "user"(id) on delete cascade,
-  name        text not null,
-  description text,
-  filters     jsonb not null default '{}'::jsonb,
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
-);
-create index if not exists idx_segments_owner on segments(owner_id);
-drop trigger if exists trg_segments_touch on segments;
-create trigger trg_segments_touch before update on segments
-  for each row execute function touch_updated_at();
+-- OKR: meta opcionalmente atrelada a um deal ou empresa (fix.md §6). Aditiva
+-- e idempotente — segura tanto numa tabela recém-criada quanto num ambiente
+-- que já rodou a migration antes desta coluna existir.
+alter table sales_goals add column if not exists deal_id uuid references deals(id) on delete set null;
+alter table sales_goals add column if not exists company_id uuid references companies(id) on delete set null;
+
+-- Feature "Filtros Salvos" removida (fix.md §7). A tabela `segments` não faz
+-- mais parte do estado desejado. Ambientes já provisionados com a tabela
+-- antiga devem rodar manualmente:
+--   drop table if exists segments cascade;
 

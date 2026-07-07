@@ -9,20 +9,14 @@ import {
 } from "@/components/ui/select";
 import { Building2, KanbanSquare, Check, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
-import { INDUSTRIES } from "@/lib/constants";
-import { createCompany, createPipeline, createStage } from "@/lib/data";
+import { INDUSTRIES, DEFAULT_STAGES } from "@/lib/constants";
+import { invalidatePipelines, invalidateStages } from "@/hooks/usePipelines";
+import { invalidateCompanies } from "@/hooks/useCompanies";
+import { createCompany, createDefaultPipeline } from "@/lib/data";
 
 // Setup reduzido aos steps de DADOS (Importantdoc §6 / docs/10 §2.3): empresa-semente +
 // pipeline com estágios. Os steps de AI/Resend/Slack/Email saíram (backend/Composio).
 // owner_id é setado pelo gateway — não enviamos.
-
-const DEFAULT_STAGES = [
-  { name: "Lead", color: "#94a3b8", win_probability: 10 },
-  { name: "Qualificado", color: "#3b82f6", win_probability: 25 },
-  { name: "Proposta", color: "#f59e0b", win_probability: 50 },
-  { name: "Negociação", color: "#8b5cf6", win_probability: 75 },
-  { name: "Fechado", color: "#22c55e", win_probability: 100 },
-];
 
 export default function SetupScreen() {
   const navigate = useNavigate();
@@ -46,14 +40,11 @@ export default function SetupScreen() {
           domain: company.domain || null,
           industry: company.industry || null,
         });
+        invalidateCompanies();
       }
-      const pipeline = await createPipeline({ name: pipelineName.trim() || "Pipeline de Vendas", is_default: true });
-      if (pipeline?.id) {
-        for (let i = 0; i < DEFAULT_STAGES.length; i++) {
-          const s = DEFAULT_STAGES[i];
-          await createStage({ pipeline_id: pipeline.id, name: s.name, color: s.color, win_probability: s.win_probability, sort_order: i });
-        }
-      }
+      await createDefaultPipeline(pipelineName.trim() || "Pipeline de Vendas");
+      invalidatePipelines();
+      invalidateStages();
       toast.success("Tudo pronto!");
       navigate("/dashboard");
     } catch (e) {
@@ -105,7 +96,7 @@ export default function SetupScreen() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg"><KanbanSquare className="h-5 w-5 text-primary" />Seu pipeline de vendas</CardTitle>
-              <CardDescription>Criaremos um pipeline com 5 estágios padrão. Você ajusta em Configurações.</CardDescription>
+              <CardDescription>Criaremos um pipeline com 5 estágios padrão. Você ajusta depois em Negócios → Personalizar pipeline.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1">

@@ -29,7 +29,9 @@
     "useDefineForClassFields": true
   },
   "include": [
-    "src",
-    "preview-fixtures.ts"
+    "src"
+  ],
+  "exclude": [
+    "src/server.ts"
   ]
 }

@@ -16,8 +16,6 @@ const moreItems = [
   { title: "Empresas", url: "/companies" },
   { title: "Atividades", url: "/activities" },
   { title: "Metas", url: "/sales-goals" },
-  { title: "Filtros Salvos", url: "/segments" },
-  { title: "Configurações", url: "/settings" },
 ];
 
 export function MobileBottomNav() {

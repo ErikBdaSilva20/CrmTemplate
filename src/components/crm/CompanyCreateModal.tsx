@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -6,18 +6,16 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
-import { Building2, X, Search, Users, Check } from "lucide-react";
+import { X, Search, Users, Check } from "lucide-react";
 import { toast } from "sonner";
-import { INDUSTRIES, COMPANY_SIZES } from "@/lib/constants";
-import { createCompany, listContacts, updateContact, type Contact } from "@/lib/data";
+import { useContacts, invalidateContacts } from "@/hooks/useContacts";
+import { createCompany, updateContact } from "@/lib/data";
+import { CompanyLogo } from "@/components/crm/CompanyLogo";
+import { CompanyForm, EMPTY_COMPANY_FORM, type CompanyFormValue } from "@/components/crm/CompanyForm";
 
 interface CompanyCreateModalProps {
   open: boolean;
@@ -26,33 +24,18 @@ interface CompanyCreateModalProps {
 }
 
 export function CompanyCreateModal({ open, onOpenChange, onCreated }: CompanyCreateModalProps) {
-  const [form, setForm] = useState({
-    name: "", domain: "", industry: "", size: "", revenue: "",
-    website: "", linkedin_url: "",
-  });
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [form, setForm] = useState<CompanyFormValue>(EMPTY_COMPANY_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Contacts multi-select
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  // Contacts multi-select — reaproveita a cache compartilhada (§1.1).
+  const { data: contactsRaw } = useContacts();
+  const contacts = useMemo(
+    () => [...contactsRaw].sort((a, b) => a.first_name.localeCompare(b.first_name)),
+    [contactsRaw],
+  );
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
   const [contactSearch, setContactSearch] = useState("");
   const [contactsOpen, setContactsOpen] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    listContacts().then((data) =>
-      setContacts([...data].sort((a, b) => a.first_name.localeCompare(b.first_name))),
-    );
-  }, [open]);
-
-  useEffect(() => {
-    if (form.domain && form.domain.includes(".")) {
-      setLogoUrl(`https://logo.clearbit.com/${form.domain}`);
-    } else {
-      setLogoUrl(null);
-    }
-  }, [form.domain]);
 
   const filteredContacts = useMemo(() => {
     const q = contactSearch.toLowerCase();
@@ -96,10 +79,11 @@ export function CompanyCreateModal({ open, onOpenChange, onCreated }: CompanyCre
         await Promise.all(
           selectedContactIds.map((cid) => updateContact(cid, { company_id: created.id })),
         );
+        invalidateContacts();
       }
 
       onOpenChange(false);
-      setForm({ name: "", domain: "", industry: "", size: "", revenue: "", website: "", linkedin_url: "" });
+      setForm(EMPTY_COMPANY_FORM);
       setSelectedContactIds([]);
       setContactSearch("");
       onCreated();
@@ -122,54 +106,14 @@ export function CompanyCreateModal({ open, onOpenChange, onCreated }: CompanyCre
           <div className="space-y-4 mt-2">
             {/* Logo preview */}
             <div className="flex justify-center">
-              {logoUrl ? (
-                <img src={logoUrl} alt="" className="h-16 w-16 rounded-lg bg-muted object-contain" onError={() => setLogoUrl(null)} />
-              ) : (
-                <Avatar className="h-16 w-16"><AvatarFallback className="bg-primary/10 text-primary"><Building2 className="h-8 w-8" /></AvatarFallback></Avatar>
-              )}
+              <CompanyLogo
+                domain={form.domain && form.domain.includes(".") ? form.domain : null}
+                className="h-16 w-16"
+                iconClassName="h-8 w-8"
+              />
             </div>
 
-            <div className="space-y-1">
-              <Label className="text-xs">Nome *</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={errors.name ? "border-destructive" : ""} />
-              {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Domínio (para logo automático)</Label>
-              <Input value={form.domain} onChange={(e) => setForm({ ...form, domain: e.target.value })} placeholder="empresa.com.br" />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Indústria</Label>
-              <Select value={form.industry} onValueChange={(v) => setForm({ ...form, industry: v })}>
-                <SelectTrigger><SelectValue placeholder="Selecionar indústria" /></SelectTrigger>
-                <SelectContent>
-                  {INDUSTRIES.map((ind) => (
-                    <SelectItem key={ind} value={ind}>{ind}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Tamanho</Label>
-              <Select value={form.size} onValueChange={(v) => setForm({ ...form, size: v })}>
-                <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                <SelectContent>
-                  {COMPANY_SIZES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Receita anual</Label>
-              <Input type="number" value={form.revenue} onChange={(e) => setForm({ ...form, revenue: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Website</Label>
-              <Input value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">LinkedIn</Label>
-              <Input value={form.linkedin_url} onChange={(e) => setForm({ ...form, linkedin_url: e.target.value })} />
-            </div>
+            <CompanyForm value={form} onChange={(patch) => setForm({ ...form, ...patch })} errors={errors} />
 
             {/* Contacts multi-select */}
             <div className="space-y-1">

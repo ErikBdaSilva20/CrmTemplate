@@ -1,0 +1,168 @@
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Columns3, Download, Filter, LayoutGrid, List, Plus, Search, Upload, X } from "lucide-react";
+import { CONTACT_STATUS, CONTACT_STATUSES } from "@/lib/domain";
+import type { Company } from "@/lib/data";
+import { SegmentedToggle } from "@/components/ui/segmented-toggle";
+import { PeriodSelect } from "@/components/crm/PeriodSelect";
+import type { Period } from "@/lib/period";
+
+export type ContactsViewMode = "table" | "cards" | "status";
+
+export interface ContactFilters {
+  status?: string;
+  companyId?: string;
+}
+
+interface ContactsToolbarProps {
+  filteredCount: number;
+  search: string;
+  onSearchChange: (value: string) => void;
+  viewMode: ContactsViewMode;
+  onViewModeChange: (mode: ContactsViewMode) => void;
+  showFilters: boolean;
+  onToggleFilters: () => void;
+  filters: ContactFilters;
+  onFiltersChange: (filters: ContactFilters) => void;
+  companies: Company[];
+  onImportClick: () => void;
+  onExportClick: () => void;
+  onCreateClick: () => void;
+  period: Period;
+  onPeriodChange: (period: Period) => void;
+}
+
+const DEFAULT_PERIOD: Period = { kind: "preset", preset: "all" };
+
+// Cabeçalho de /contacts (busca, alternância de visualização, ações) + o
+// painel de filtros expansível — vivem juntos porque o painel só existe em
+// função do botão "Filtros" deste cabeçalho.
+export function ContactsToolbar({
+  filteredCount,
+  search,
+  onSearchChange,
+  viewMode,
+  onViewModeChange,
+  showFilters,
+  onToggleFilters,
+  filters,
+  onFiltersChange,
+  companies,
+  onImportClick,
+  onExportClick,
+  onCreateClick,
+  period,
+  onPeriodChange,
+}: ContactsToolbarProps) {
+  return (
+    <>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Contatos</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">{filteredCount} contatos</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-56">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Buscar nome, email ou telefone"
+              className="h-8 pl-7 pr-7 text-xs"
+              aria-label="Buscar contatos"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => onSearchChange("")}
+                aria-label="Limpar busca"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <SegmentedToggle
+            options={[
+              { value: "table", label: "Tabela", icon: List, ariaLabel: "Visualização tabela" },
+              { value: "cards", label: "Cartões", icon: LayoutGrid, ariaLabel: "Visualização cartões" },
+              { value: "status", label: "Funil", icon: Columns3, ariaLabel: "Visualização funil por status" },
+            ]}
+            value={viewMode}
+            onChange={onViewModeChange}
+          />
+          <Button variant="outline" size="sm" onClick={onToggleFilters} aria-label="Alternar filtros">
+            <Filter className="mr-1 h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Filtros</span>
+          </Button>
+          <Button variant="outline" size="sm" onClick={onImportClick} aria-label="Importar CSV" className="hidden sm:flex">
+            <Upload className="mr-1.5 h-3.5 w-3.5" />
+            Importar
+          </Button>
+          <Button variant="outline" size="sm" onClick={onExportClick} aria-label="Exportar CSV" className="hidden sm:flex">
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            Exportar
+          </Button>
+          <Button onClick={onCreateClick} aria-label="Criar novo contato">
+            <Plus className="mr-1 sm:mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Novo Contato</span>
+            <span className="sm:hidden">Novo</span>
+          </Button>
+        </div>
+      </div>
+
+      {showFilters && (
+        <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-muted/30 p-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Status</Label>
+            <Select
+              value={filters.status || "all"}
+              onValueChange={(v) => onFiltersChange({ ...filters, status: v === "all" ? undefined : v })}
+            >
+              <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {CONTACT_STATUSES.map((status) => (
+                  <SelectItem key={status} value={status}>{CONTACT_STATUS[status].label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Empresa</Label>
+            <Select
+              value={filters.companyId || "all"}
+              onValueChange={(v) => onFiltersChange({ ...filters, companyId: v === "all" ? undefined : v })}
+            >
+              <SelectTrigger className="w-40 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Criado em</Label>
+            <PeriodSelect value={period} onChange={onPeriodChange} />
+          </div>
+          {(Object.values(filters).some(Boolean) || period.kind !== "preset" || period.preset !== "all") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => {
+                onFiltersChange({});
+                onPeriodChange(DEFAULT_PERIOD);
+              }}
+            >
+              <X className="mr-1 h-3 w-3" />
+              Limpar
+            </Button>
+          )}
+        </div>
+      )}
+    </>
+  );
+}

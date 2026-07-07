@@ -5,12 +5,12 @@
 //   • 1º usuário do tenant vira admin; demais entram como rep (automático no gateway).
 //   • `role` é usado SÓ pra UI (esconder botões). A segurança real é no gateway.
 // =============================================================================
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { Navigate } from "react-router-dom";
-import { auth, type Me, type Role } from "./data/client";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { Navigate } from 'react-router-dom';
+import { auth, type Me, type Role } from './data/client';
 
 interface AuthState {
-  user: Me["user"];
+  user: Me['user'];
   role: Role | null;
   loading: boolean;
   refresh: () => Promise<void>;
@@ -28,7 +28,7 @@ const AuthContext = createContext<AuthState>({
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<Me["user"]>(null);
+  const [user, setUser] = useState<Me['user']>(null);
   const [role, setRole] = useState<Role | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// Gate de rota — substitui o redirect do AppLayout do FlowCRM.
+// Gate de rota — substitui o redirect do AppLayout do CellRM.
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) {
@@ -79,5 +79,5 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 // Helper de UI: hierarquia admin > manager > rep (owner conta como admin pra UI).
 const RANK: Record<string, number> = { admin: 3, owner: 3, manager: 2, rep: 1 };
 export function roleAtLeast(role: Role | null, min: Role): boolean {
-  return (RANK[role ?? ""] ?? 0) >= (RANK[min] ?? 99);
+  return (RANK[role ?? ''] ?? 0) >= (RANK[min] ?? 99);
 }

@@ -16,6 +16,7 @@ import {
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Building2, ClipboardList, Handshake, Plus, Users } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { SystemRequirementsWidget } from './SystemRequirementsWidget';
 
 const routeLabels: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -25,8 +26,6 @@ const routeLabels: Record<string, string> = {
   '/activities': 'Atividades',
   '/tasks': 'Tarefas',
   '/sales-goals': 'Metas',
-  '/segments': 'Filtros Salvos',
-  '/settings': 'Configurações',
 };
 
 export function AppHeader() {
@@ -40,7 +39,7 @@ export function AppHeader() {
     { label: 'Nova Atividade', icon: ClipboardList, path: '/activities?action=new' },
   ];
 
-  const parts: { label: string; href?: string }[] = [{ label: 'FlowCRM', href: '/dashboard' }];
+  const parts: { label: string; href?: string }[] = [{ label: 'CellRM', href: '/dashboard' }];
 
   if (location.pathname.startsWith('/deals/') && location.pathname !== '/deals') {
     parts.push({ label: 'Negócios', href: '/deals' });
@@ -75,6 +74,7 @@ export function AppHeader() {
       </span>
 
       <div className="flex items-center gap-1.5 sm:gap-2">
+        <SystemRequirementsWidget />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button

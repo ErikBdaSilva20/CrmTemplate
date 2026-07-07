@@ -1,5 +1,7 @@
 import { db } from "./client";
 import type { Database } from "./types.gen";
+import { DEFAULT_STAGES } from "@/lib/constants";
+import { normalizeNumericFields } from "./normalize";
 
 // Lookups (config): admin/manager escreve, rep só lê. Sem owner_id.
 export type Pipeline = Database["public"]["Tables"]["pipelines"]["Row"];
@@ -17,11 +19,16 @@ export const updatePipeline = (id: string, patch: PipelineUpdate) =>
   db.table<Pipeline>("pipelines").update(id, patch);
 export const deletePipeline = (id: string) => db.table<Pipeline>("pipelines").remove(id);
 
-export const listStages = () => db.table<PipelineStage>("pipeline_stages").list();
-export const createStage = (input: PipelineStageInsert) =>
-  db.table<PipelineStage>("pipeline_stages").create(input);
-export const updateStage = (id: string, patch: PipelineStageUpdate) =>
-  db.table<PipelineStage>("pipeline_stages").update(id, patch);
+export function normalizeStage(s: PipelineStage): PipelineStage {
+  return normalizeNumericFields(s, ["win_probability"]);
+}
+
+export const listStages = async () =>
+  (await db.table<PipelineStage>("pipeline_stages").list()).map(normalizeStage);
+export const createStage = async (input: PipelineStageInsert) =>
+  normalizeStage(await db.table<PipelineStage>("pipeline_stages").create(input));
+export const updateStage = async (id: string, patch: PipelineStageUpdate) =>
+  normalizeStage(await db.table<PipelineStage>("pipeline_stages").update(id, patch));
 export const deleteStage = (id: string) => db.table<PipelineStage>("pipeline_stages").remove(id);
 
 // Estágios de um pipeline, ordenados — filtro/sort no front.
@@ -29,3 +36,21 @@ export const listStagesByPipeline = async (pipelineId: string): Promise<Pipeline
   (await listStages())
     .filter((s) => s.pipeline_id === pipelineId)
     .sort((a, b) => a.sort_order - b.sort_order);
+
+// Pipeline + os 5 estágios padrão (mesmo seed do /setup) — usado tanto no
+// onboarding quanto no bootstrap de /deals quando não existe nenhum pipeline.
+export async function createDefaultPipeline(name: string): Promise<Pipeline> {
+  const pipeline = await createPipeline({ name, is_default: true });
+  await Promise.all(
+    DEFAULT_STAGES.map((s, i) =>
+      createStage({
+        pipeline_id: pipeline.id,
+        name: s.name,
+        color: s.color,
+        win_probability: s.win_probability,
+        sort_order: i,
+      }),
+    ),
+  );
+  return pipeline;
+}

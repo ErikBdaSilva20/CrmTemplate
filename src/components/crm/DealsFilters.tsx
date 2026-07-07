@@ -1,24 +1,33 @@
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { X, Flame } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { PeriodSelect } from '@/components/crm/PeriodSelect';
+import type { Period } from '@/lib/period';
 
 // Filtro de "Responsável" removido: no modo genérico não há diretório de usuários
 // e o rep só enxerga os próprios registros (isolamento no gateway).
 export interface DealFilters {
   minValue?: number;
   maxValue?: number;
-  closeDateFrom?: string;
-  closeDateTo?: string;
+  onlyHot?: boolean;
 }
 
 interface DealsFiltersProps {
   filters: DealFilters;
   onFiltersChange: (f: DealFilters) => void;
+  period: Period;
+  onPeriodChange: (period: Period) => void;
 }
 
-export function DealsFilters({ filters, onFiltersChange }: DealsFiltersProps) {
-  const hasFilters = Object.values(filters).some((v) => v !== undefined && v !== "");
+const DEFAULT_PERIOD: Period = { kind: 'preset', preset: 'all' };
+
+export function DealsFilters({ filters, onFiltersChange, period, onPeriodChange }: DealsFiltersProps) {
+  const hasFilters =
+    Object.values(filters).some((v) => v !== undefined && v !== '') ||
+    period.kind !== 'preset' ||
+    period.preset !== 'all';
 
   return (
     <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-muted/30 p-3">
@@ -28,8 +37,13 @@ export function DealsFilters({ filters, onFiltersChange }: DealsFiltersProps) {
           type="number"
           className="w-28 h-8 text-xs"
           placeholder="0"
-          value={filters.minValue ?? ""}
-          onChange={(e) => onFiltersChange({ ...filters, minValue: e.target.value ? Number(e.target.value) : undefined })}
+          value={filters.minValue ?? ''}
+          onChange={(e) =>
+            onFiltersChange({
+              ...filters,
+              minValue: e.target.value ? Number(e.target.value) : undefined,
+            })
+          }
         />
       </div>
 
@@ -39,34 +53,45 @@ export function DealsFilters({ filters, onFiltersChange }: DealsFiltersProps) {
           type="number"
           className="w-28 h-8 text-xs"
           placeholder="∞"
-          value={filters.maxValue ?? ""}
-          onChange={(e) => onFiltersChange({ ...filters, maxValue: e.target.value ? Number(e.target.value) : undefined })}
+          value={filters.maxValue ?? ''}
+          onChange={(e) =>
+            onFiltersChange({
+              ...filters,
+              maxValue: e.target.value ? Number(e.target.value) : undefined,
+            })
+          }
         />
       </div>
 
       <div className="space-y-1">
-        <Label className="text-xs">Fechamento de</Label>
-        <Input
-          type="date"
-          className="w-36 h-8 text-xs"
-          value={filters.closeDateFrom ?? ""}
-          onChange={(e) => onFiltersChange({ ...filters, closeDateFrom: e.target.value || undefined })}
-        />
+        <Label className="text-xs">Fechamento</Label>
+        <PeriodSelect value={period} onChange={onPeriodChange} />
       </div>
 
-      <div className="space-y-1">
-        <Label className="text-xs">até</Label>
-        <Input
-          type="date"
-          className="w-36 h-8 text-xs"
-          value={filters.closeDateTo ?? ""}
-          onChange={(e) => onFiltersChange({ ...filters, closeDateTo: e.target.value || undefined })}
+      <div className="flex items-center gap-2 h-8 px-2 mt-auto mb-0.5 rounded-md bg-orange-500/10 border border-orange-500/20">
+        <Switch
+          id="sniper-mode"
+          checked={filters.onlyHot || false}
+          onCheckedChange={(checked) => onFiltersChange({ ...filters, onlyHot: checked || undefined })}
         />
+        <Label htmlFor="sniper-mode" className="text-xs font-bold text-orange-600 flex items-center gap-1 cursor-pointer">
+          <Flame className="h-3.5 w-3.5 fill-orange-500" />
+          Apenas Quentes (Hot)
+        </Label>
       </div>
 
       {hasFilters && (
-        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" onClick={() => onFiltersChange({})}>
-          <X className="mr-1 h-3 w-3" />Limpar
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 text-xs text-muted-foreground"
+          onClick={() => {
+            onFiltersChange({});
+            onPeriodChange(DEFAULT_PERIOD);
+          }}
+        >
+          <X className="mr-1 h-3 w-3" />
+          Limpar
         </Button>
       )}
     </div>

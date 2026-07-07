@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,45 +18,67 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Plus, Clock, AlertTriangle, Trash2, Edit2, MoreHorizontal,
+  Plus, Clock, AlertTriangle, Trash2, Edit2, MoreHorizontal, Kanban, List,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useActivities } from "@/hooks/useActivities";
+import { useContacts } from "@/hooks/useContacts";
+import { useDeals } from "@/hooks/useDeals";
+import { useCompanies } from "@/hooks/useCompanies";
+import { useAuth } from "@/lib/auth";
+import { TasksKanban } from "@/components/crm/TasksKanban";
 import {
-  listTasks, createActivity, updateActivity, deleteActivity, toggleTaskDone,
-  listContacts, listDeals,
-  type Activity, type Contact, type Deal,
+  createActivity, updateActivity, deleteActivity, toggleTaskDone,
+  type Activity, type ActivityUpdate,
 } from "@/lib/data";
+import { dueDateForBucket, type TaskBucket } from "@/lib/tasks";
+import { filterByBucket, countByBucket, type OperationalBucket } from "@/lib/activityBuckets";
+import { isInInterval, resolvePeriod, type Period } from "@/lib/period";
 import { formatDateShort } from "@/lib/format";
+import { SegmentedToggle } from "@/components/ui/segmented-toggle";
+import { BucketTabs } from "@/components/crm/BucketTabs";
+import { PeriodSelect } from "@/components/crm/PeriodSelect";
+type ViewMode = "list" | "kanban";
 
-type DateFilter = "todo" | "overdue" | "today" | "tomorrow" | "this_week" | "done";
+type DateFilter = Exclude<OperationalBucket, "next_week" | "next_30_days">;
 
-const dateFilterLabels: Record<DateFilter, string> = {
-  todo: "Para fazer",
-  overdue: "Vencidas",
-  today: "Hoje",
-  tomorrow: "Amanhã",
-  this_week: "Esta semana",
-  done: "Concluídas",
-};
-
-function startOfDay(d: Date) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
-function endOfDay(d: Date) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999); }
-
-function getWeekRange() {
-  const now = new Date();
-  const day = now.getDay();
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  return { start: startOfDay(monday), end: endOfDay(sunday) };
-}
+const BUCKETS: { key: DateFilter; label: string }[] = [
+  { key: "todo", label: "Para fazer" },
+  { key: "overdue", label: "Vencidas" },
+  { key: "today", label: "Hoje" },
+  { key: "tomorrow", label: "Amanhã" },
+  { key: "this_week", label: "Esta semana" },
+  { key: "done", label: "Concluídas" },
+];
 
 export default function TasksScreen() {
-  const [tasks, setTasks] = useState<Activity[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [deals, setDeals] = useState<Deal[]>([]);
+  const { data: activitiesRaw, refresh: refreshActivities } = useActivities();
+  const { data: contacts } = useContacts();
+  const { data: deals } = useDeals();
+  const { data: companies } = useCompanies();
+  const { user } = useAuth();
+  const ownerName = user?.name || "Usuário";
+
+  // Espelha a cache compartilhada num state local pra permitir atualização
+  // otimista no drag do Kanban (mesmo padrão de ContactsScreen/DealsScreen) —
+  // sem isso, o card só pula de coluna depois do round-trip completo.
+  const [activities, setActivities] = useState(activitiesRaw);
+  useEffect(() => {
+    setActivities(activitiesRaw);
+  }, [activitiesRaw]);
+
+  // Tarefas = activities com type="task" (activities.repo.ts) — mesma cache
+  // de ActivitiesScreen, só filtrada no front.
+  const tasks = useMemo(
+    () => [...activities].filter((a) => a.type === "task").sort((a, b) => (a.due_date || "9999").localeCompare(b.due_date || "9999")),
+    [activities],
+  );
+
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [dateFilter, setDateFilter] = useState<DateFilter>("todo");
+  // Período analítico (FR-16) — "Tudo" preserva o comportamento atual (zero
+  // recorte por Período) até o usuário escolher um.
+  const [period, setPeriod] = useState<Period>({ kind: "preset", preset: "all" });
   const [createOpen, setCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState<Activity | null>(null);
 
@@ -67,28 +89,34 @@ export default function TasksScreen() {
   const [formContactId, setFormContactId] = useState("none");
   const [formDealId, setFormDealId] = useState("none");
 
-  // Sem org_id; tarefas = activities type='task' (repo). O gateway isola por tenant.
-  const fetchData = useCallback(async () => {
-    const [tasksAll, contactsAll, dealsAll] = await Promise.all([
-      listTasks(), listContacts(), listDeals(),
-    ]);
-    setTasks(
-      [...tasksAll].sort((a, b) => (a.due_date || "9999").localeCompare(b.due_date || "9999")),
-    );
-    setContacts(contactsAll);
-    setDeals(dealsAll);
-  }, []);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
-
   const toggleComplete = async (task: Activity) => {
     await toggleTaskDone(task.id, !task.completed_at);
-    fetchData();
+    refreshActivities();
+  };
+
+  // Move uma tarefa entre buckets do Kanban: "Concluídas" marca completed_at;
+  // qualquer outra coluna ajusta due_date e reabre a tarefa (completed_at:
+  // null), o que também cobre o caso de arrastar de volta de "Concluídas".
+  const handleKanbanDragEnd = async (taskId: string, targetBucket: TaskBucket) => {
+    const patch: ActivityUpdate =
+      targetBucket === "done"
+        ? { completed_at: new Date().toISOString() }
+        : { due_date: dueDateForBucket(targetBucket), completed_at: null };
+
+    const previous = activities;
+    setActivities((prev) => prev.map((a) => (a.id === taskId ? { ...a, ...patch } : a)));
+    try {
+      await updateActivity(taskId, patch);
+      refreshActivities();
+    } catch (e) {
+      setActivities(previous);
+      toast.error(e instanceof Error ? e.message : "Erro ao mover tarefa");
+    }
   };
 
   const removeTask = async (id: string) => {
     await deleteActivity(id);
-    fetchData();
+    refreshActivities();
     toast.success("Tarefa excluída");
   };
 
@@ -97,53 +125,21 @@ export default function TasksScreen() {
 
   const isOverdue = (t: Activity) => !t.completed_at && t.due_date && new Date(t.due_date) < new Date();
 
+  const periodInterval = useMemo(() => resolvePeriod(period), [period]);
+
+  // Bucket (src/lib/activityBuckets.ts) filtra por due_date — operacional,
+  // "o que fazer agora". Período (src/lib/period.ts) filtra por created_at —
+  // analítico, "como foi o intervalo X" (FR-16, Glossário do PRD §3). Os
+  // dois participam aqui, lado a lado, como condições independentes.
   const filtered = useMemo(() => {
-    const now = new Date();
-    const todayStart = startOfDay(now);
-    const todayEnd = endOfDay(now);
-    const tomorrowStart = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
-    const tomorrowEnd = endOfDay(tomorrowStart);
-    const thisWeek = getWeekRange();
+    const byBucket = filterByBucket(tasks, dateFilter);
+    return byBucket.filter((t) => isInInterval(t.created_at, periodInterval));
+  }, [tasks, dateFilter, periodInterval]);
 
-    return tasks.filter((t) => {
-      const dueDate = t.due_date ? new Date(t.due_date) : null;
-      switch (dateFilter) {
-        case "todo":
-          return !t.completed_at;
-        case "overdue":
-          return !t.completed_at && dueDate !== null && dueDate < now;
-        case "today":
-          return !t.completed_at && dueDate !== null && dueDate >= todayStart && dueDate <= todayEnd;
-        case "tomorrow":
-          return !t.completed_at && dueDate !== null && dueDate >= tomorrowStart && dueDate <= tomorrowEnd;
-        case "this_week":
-          return !t.completed_at && dueDate !== null && dueDate >= thisWeek.start && dueDate <= thisWeek.end;
-        case "done":
-          return !!t.completed_at;
-      }
-      return true;
-    });
-  }, [tasks, dateFilter, contacts, deals]);
-
-  const counts = useMemo(() => {
-    const now = new Date();
-    const todayStart = startOfDay(now);
-    const todayEnd = endOfDay(now);
-    const tomorrowStart = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
-    const tomorrowEnd = endOfDay(tomorrowStart);
-    const thisWeek = getWeekRange();
-
-    const base = tasks.filter((t) => !t.completed_at);
-
-    return {
-      todo: base.length,
-      overdue: base.filter((t) => t.due_date && new Date(t.due_date) < now).length,
-      today: base.filter((t) => t.due_date && new Date(t.due_date) >= todayStart && new Date(t.due_date) <= todayEnd).length,
-      tomorrow: base.filter((t) => t.due_date && new Date(t.due_date) >= tomorrowStart && new Date(t.due_date) <= tomorrowEnd).length,
-      this_week: base.filter((t) => t.due_date && new Date(t.due_date) >= thisWeek.start && new Date(t.due_date) <= thisWeek.end).length,
-      done: tasks.filter((t) => !!t.completed_at).length,
-    };
-  }, [tasks]);
+  const counts = useMemo(
+    () => countByBucket(tasks, ["todo", "overdue", "today", "tomorrow", "this_week", "done"]),
+    [tasks],
+  ) as Record<DateFilter, number>;
 
   const openCreate = () => {
     setFormTitle("");
@@ -186,7 +182,7 @@ export default function TasksScreen() {
         toast.success("Tarefa criada");
       }
       setCreateOpen(false);
-      fetchData();
+      refreshActivities();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao salvar");
     }
@@ -203,38 +199,42 @@ export default function TasksScreen() {
             {counts.overdue > 0 && <span className="text-destructive font-medium ml-1">· {counts.overdue} vencidas</span>}
           </p>
         </div>
-        <Button onClick={openCreate} size="sm">
-          <Plus className="mr-1.5 h-3.5 w-3.5" />Tarefa
-        </Button>
+        <div className="flex items-center gap-2">
+          <SegmentedToggle
+            options={[
+              { value: "kanban", label: "Kanban", icon: Kanban, ariaLabel: "Visualização Kanban" },
+              { value: "list", label: "Lista", icon: List, ariaLabel: "Visualização lista" },
+            ]}
+            value={viewMode}
+            onChange={setViewMode}
+          />
+          <Button onClick={openCreate} size="sm">
+            <Plus className="mr-1.5 h-3.5 w-3.5" />Tarefa
+          </Button>
+        </div>
       </div>
 
-      {/* Date filter tabs */}
-      <div className="flex items-center gap-0.5 py-2 text-xs flex-wrap">
-        {(Object.keys(dateFilterLabels) as DateFilter[]).map((key) => {
-          const count = counts[key];
-          const isActive = dateFilter === key;
-          const isOverdueTab = key === "overdue";
-          return (
-            <button
-              key={key}
-              onClick={() => setDateFilter(key)}
-              className={`px-3 py-1 rounded-md font-medium transition-colors ${
-                isActive
-                  ? isOverdueTab && count > 0
-                    ? "bg-destructive/10 text-destructive"
-                    : "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-            >
-              {dateFilterLabels[key]}
-              {count > 0 && (
-                <span className={`ml-1 text-[10px] ${isOverdueTab ? "text-destructive" : ""}`}>
-                  ({count})
-                </span>
-              )}
-            </button>
-          );
-        })}
+      {viewMode === "kanban" && (
+        <TasksKanban
+          tasks={tasks}
+          contacts={contacts}
+          deals={deals}
+          companies={companies}
+          ownerName={ownerName}
+          onTaskClick={openEdit}
+          onDragEnd={handleKanbanDragEnd}
+        />
+      )}
+
+      {viewMode === "list" && (
+        <>
+      {/* Date filter tabs + Período analítico */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <BucketTabs buckets={BUCKETS} counts={counts} value={dateFilter} onChange={setDateFilter} destructiveKey="overdue" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-medium text-muted-foreground">Período</span>
+          <PeriodSelect value={period} onChange={setPeriod} />
+        </div>
       </div>
 
       {/* Table */}
@@ -328,6 +328,8 @@ export default function TasksScreen() {
           </TableBody>
         </Table>
       </div>
+        </>
+      )}
 
       {/* Create/Edit dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

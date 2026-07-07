@@ -1,82 +1,32 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from "@/components/ui/dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Plus, Phone, Mail, Calendar, FileText, CheckSquare, List,
-  CalendarDays, Trash2, Edit2, MoreHorizontal,
-  ChevronLeft, ChevronRight,
-} from "lucide-react";
 import { toast } from "sonner";
-import {
-  listActivities, createActivity, updateActivity, deleteActivity,
-  listContacts, listCompanies, listDeals,
-  type Activity, type Contact, type Company, type Deal, type ActivityType,
-} from "@/lib/data";
+import { ActivityCreateEditModal } from "@/components/crm/ActivityCreateEditModal";
+import { ActivitiesToolbar, type DateFilter, type ViewMode } from "@/components/crm/activities/ActivitiesToolbar";
+import { ActivitiesTable } from "@/components/crm/activities/ActivitiesTable";
+import { ActivitiesCalendar, type CalendarMonth } from "@/components/crm/activities/ActivitiesCalendar";
+import { useActivities } from "@/hooks/useActivities";
+import { useContacts } from "@/hooks/useContacts";
+import { useCompanies } from "@/hooks/useCompanies";
+import { useDeals } from "@/hooks/useDeals";
+import { filterByBucket, countByBucket } from "@/lib/activityBuckets";
+import { isInInterval, resolvePeriod, type Period } from "@/lib/period";
+import { updateActivity, deleteActivity, type Activity } from "@/lib/data";
 
-const typeIcons: Record<ActivityType, React.ComponentType<{ className?: string }>> = {
-  call: Phone, email: Mail, meeting: Calendar, note: FileText, task: CheckSquare,
-};
-const typeLabels: Record<ActivityType, string> = {
-  call: "Ligação", email: "Email", meeting: "Reunião", note: "Nota", task: "Tarefa",
-};
-const typeColors: Record<ActivityType, string> = {
-  call: "text-emerald-600",
-  email: "text-blue-600",
-  meeting: "text-amber-600",
-  note: "text-muted-foreground",
-  task: "text-violet-600",
-};
-
-type ViewMode = "list" | "calendar";
-type DateFilter = "todo" | "overdue" | "today" | "tomorrow" | "this_week" | "next_week" | "next_30_days";
-
-const dateFilterLabels: Record<DateFilter, string> = {
-  todo: "Para fazer",
-  overdue: "Vencido",
-  today: "Hoje",
-  tomorrow: "Amanhã",
-  this_week: "Esta semana",
-  next_week: "Próxima semana",
-  next_30_days: "Próximos 30 dias",
-};
-
-function startOfDay(d: Date) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
-function endOfDay(d: Date) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999); }
-
-function getWeekRange(offset: number) {
-  const now = new Date();
-  const day = now.getDay();
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1) + offset * 7);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  return { start: startOfDay(monday), end: endOfDay(sunday) };
-}
-
+// Orquestrador de layout: busca os dados, calcula os filtros/contagens e
+// delega toda a renderização visual para os subcomponentes em
+// components/crm/activities/** (Masia Clone-Template Audit Framework §4/§6.1).
 export default function ActivitiesScreen() {
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [deals, setDeals] = useState<Deal[]>([]);
+  const { data: activities, refresh: refreshActivities } = useActivities();
+  const { data: contacts } = useContacts();
+  const { data: companies } = useCompanies();
+  const { data: deals } = useDeals();
+
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<DateFilter>("todo");
+  // Período analítico (FR-16) — "Tudo" preserva o comportamento atual (zero
+  // recorte por Período) até o usuário escolher um.
+  const [period, setPeriod] = useState<Period>({ kind: "preset", preset: "all" });
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [createOpen, setCreateOpen] = useState(false);
   const [editActivity, setEditActivity] = useState<Activity | null>(null);
@@ -90,384 +40,79 @@ export default function ActivitiesScreen() {
     }
   }, [searchParams, setSearchParams]);
 
-  const [calMonth, setCalMonth] = useState(() => {
+  const [calMonth, setCalMonth] = useState<CalendarMonth>(() => {
     const d = new Date();
     return { year: d.getFullYear(), month: d.getMonth() };
   });
 
-  // Sem org_id, sem join — busca tudo e cruza no front.
-  const fetchData = useCallback(async () => {
-    const [activitiesAll, contactsAll, companiesAll, dealsAll] = await Promise.all([
-      listActivities(), listContacts(), listCompanies(), listDeals(),
-    ]);
-    setActivities(
-      [...activitiesAll].sort((a, b) => (a.due_date || "9999").localeCompare(b.due_date || "9999")),
-    );
-    setContacts(contactsAll);
-    setCompanies(companiesAll);
-    setDeals(dealsAll);
-  }, []);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const sortedActivities = useMemo(
+    () => [...activities].sort((a, b) => (a.due_date || "9999").localeCompare(b.due_date || "9999")),
+    [activities],
+  );
 
   const toggleComplete = async (activity: Activity) => {
     const completed_at = activity.completed_at ? null : new Date().toISOString();
     await updateActivity(activity.id, { completed_at });
-    fetchData();
+    refreshActivities();
   };
 
   const removeActivity = async (id: string) => {
     await deleteActivity(id);
-    fetchData();
+    refreshActivities();
     toast.success("Atividade excluída");
   };
 
-  const getContact = (id: string | null) => id ? contacts.find((c) => c.id === id) : null;
-  const getCompany = (id: string | null) => id ? companies.find((c) => c.id === id) : null;
-  const getDeal = (id: string | null) => id ? deals.find((d) => d.id === id) : null;
+  const periodInterval = useMemo(() => resolvePeriod(period), [period]);
 
-  const isOverdue = (a: Activity) => !a.completed_at && a.due_date && new Date(a.due_date) < new Date();
-
+  // Bucket (src/lib/activityBuckets.ts) filtra por due_date — operacional,
+  // "o que fazer agora". Período (src/lib/period.ts) filtra por created_at —
+  // analítico, "como foi o intervalo X" (FR-16, Glossário do PRD §3). Os
+  // dois participam aqui, lado a lado, como condições independentes.
   const filtered = useMemo(() => {
-    const now = new Date();
-    const todayStart = startOfDay(now);
-    const todayEnd = endOfDay(now);
-    const tomorrowStart = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
-    const tomorrowEnd = endOfDay(tomorrowStart);
-    const thisWeek = getWeekRange(0);
-    const nextWeek = getWeekRange(1);
-    const next30End = endOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30));
+    const byType = typeFilter === "all" ? sortedActivities : sortedActivities.filter((a) => a.type === typeFilter);
+    const byBucket = filterByBucket(byType, dateFilter);
+    return byBucket.filter((a) => isInInterval(a.created_at, periodInterval));
+  }, [sortedActivities, typeFilter, dateFilter, periodInterval]);
 
-    return activities.filter((a) => {
-      if (typeFilter !== "all" && a.type !== typeFilter) return false;
-
-      const dueDate = a.due_date ? new Date(a.due_date) : null;
-      switch (dateFilter) {
-        case "todo":
-          return !a.completed_at;
-        case "overdue":
-          return !a.completed_at && dueDate !== null && dueDate < now;
-        case "today":
-          return !a.completed_at && dueDate !== null && dueDate >= todayStart && dueDate <= todayEnd;
-        case "tomorrow":
-          return !a.completed_at && dueDate !== null && dueDate >= tomorrowStart && dueDate <= tomorrowEnd;
-        case "this_week":
-          return !a.completed_at && dueDate !== null && dueDate >= thisWeek.start && dueDate <= thisWeek.end;
-        case "next_week":
-          return !a.completed_at && dueDate !== null && dueDate >= nextWeek.start && dueDate <= nextWeek.end;
-        case "next_30_days":
-          return !a.completed_at && dueDate !== null && dueDate >= todayStart && dueDate <= next30End;
-      }
-      return true;
-    });
-  }, [activities, typeFilter, dateFilter, contacts, deals]);
-
-  const counts = useMemo(() => {
-    const now = new Date();
-    const todayStart = startOfDay(now);
-    const todayEnd = endOfDay(now);
-    const tomorrowStart = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
-    const tomorrowEnd = endOfDay(tomorrowStart);
-    const thisWeek = getWeekRange(0);
-    const nextWeek = getWeekRange(1);
-    const next30End = endOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30));
-
-    const pending = activities.filter((a) => !a.completed_at);
-    return {
-      todo: pending.length,
-      overdue: pending.filter((a) => a.due_date && new Date(a.due_date) < now).length,
-      today: pending.filter((a) => a.due_date && new Date(a.due_date) >= todayStart && new Date(a.due_date) <= todayEnd).length,
-      tomorrow: pending.filter((a) => a.due_date && new Date(a.due_date) >= tomorrowStart && new Date(a.due_date) <= tomorrowEnd).length,
-      this_week: pending.filter((a) => a.due_date && new Date(a.due_date) >= thisWeek.start && new Date(a.due_date) <= thisWeek.end).length,
-      next_week: pending.filter((a) => a.due_date && new Date(a.due_date) >= nextWeek.start && new Date(a.due_date) <= nextWeek.end).length,
-      next_30_days: pending.filter((a) => a.due_date && new Date(a.due_date) >= todayStart && new Date(a.due_date) <= next30End).length,
-    };
-  }, [activities]);
-
-  const calendarDays = useMemo(() => {
-    const { year, month } = calMonth;
-    const first = new Date(year, month, 1);
-    const last = new Date(year, month + 1, 0);
-    const startDay = first.getDay();
-    const days: { date: Date; inMonth: boolean }[] = [];
-    for (let i = startDay - 1; i >= 0; i--) {
-      days.push({ date: new Date(year, month, -i), inMonth: false });
-    }
-    for (let d = 1; d <= last.getDate(); d++) {
-      days.push({ date: new Date(year, month, d), inMonth: true });
-    }
-    while (days.length % 7 !== 0) {
-      days.push({ date: new Date(year, month + 1, days.length - last.getDate() - startDay + 1), inMonth: false });
-    }
-    return days;
-  }, [calMonth]);
-
-  const activitiesByDate = useMemo(() => {
-    const map = new Map<string, Activity[]>();
-    filtered.forEach((a) => {
-      const dateStr = a.due_date
-        ? new Date(a.due_date).toISOString().split("T")[0]
-        : a.created_at
-          ? new Date(a.created_at).toISOString().split("T")[0]
-          : null;
-      if (dateStr) {
-        if (!map.has(dateStr)) map.set(dateStr, []);
-        map.get(dateStr)!.push(a);
-      }
-    });
-    return map;
-  }, [filtered]);
-
-  const monthNames = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  const counts = useMemo(
+    () => countByBucket(sortedActivities, ["todo", "overdue", "today", "tomorrow", "this_week", "next_week", "next_30_days"]),
+    [sortedActivities],
+  ) as Record<DateFilter, number>;
 
   return (
     <div className="space-y-0">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Atividades</h1>
-          <p className="text-sm text-muted-foreground">
-            {filtered.length} atividades
-            {counts.overdue > 0 && <span className="text-destructive font-medium ml-1">· {counts.overdue} atrasadas</span>}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
-            <button onClick={() => setViewMode("list")} aria-label="Lista" className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-              <List className="h-3.5 w-3.5" />
-            </button>
-            <button onClick={() => setViewMode("calendar")} aria-label="Calendário" className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "calendar" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-              <CalendarDays className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <Button onClick={() => setCreateOpen(true)} size="sm">
-            <Plus className="mr-1.5 h-3.5 w-3.5" />Atividade
-          </Button>
-        </div>
-      </div>
+      <ActivitiesToolbar
+        totalCount={filtered.length}
+        overdueCount={counts.overdue}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        onCreateClick={() => setCreateOpen(true)}
+        typeFilter={typeFilter}
+        onTypeFilterChange={setTypeFilter}
+        dateFilter={dateFilter}
+        onDateFilterChange={setDateFilter}
+        dateCounts={counts}
+        period={period}
+        onPeriodChange={setPeriod}
+      />
 
-      {/* Type filter tabs */}
-      <div className="flex items-center gap-1 pb-2 border-b border-border flex-wrap">
-        <button
-          onClick={() => setTypeFilter("all")}
-          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${typeFilter === "all" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
-        >
-          Tudo
-        </button>
-        {(["call", "meeting", "task", "email", "note"] as ActivityType[]).map((t) => {
-          const Icon = typeIcons[t];
-          return (
-            <button
-              key={t}
-              onClick={() => setTypeFilter(t)}
-              className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${typeFilter === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
-            >
-              <Icon className="h-3 w-3" />
-              {typeLabels[t]}
-            </button>
-          );
-        })}
-
-      </div>
-
-      {/* Date filter tabs */}
-      <div className="flex items-center gap-0.5 py-2 text-xs flex-wrap">
-        {(Object.keys(dateFilterLabels) as DateFilter[]).map((key) => {
-          const count = counts[key];
-          const isActive = dateFilter === key;
-          const isOverdueTab = key === "overdue";
-          return (
-            <button
-              key={key}
-              onClick={() => setDateFilter(key)}
-              className={`px-3 py-1 rounded-md font-medium transition-colors ${
-                isActive
-                  ? isOverdueTab && count > 0
-                    ? "bg-destructive/10 text-destructive"
-                    : "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-            >
-              {dateFilterLabels[key]}
-              {count > 0 && (
-                <span className={`ml-1 text-[10px] ${isOverdueTab ? "text-destructive" : ""}`}>
-                  ({count})
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Table view */}
       {viewMode === "list" && (
-        <div className="rounded-md border border-border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/30">
-                <TableHead className="w-10"></TableHead>
-                <TableHead className="min-w-[200px]">Assunto</TableHead>
-                <TableHead>Negócio</TableHead>
-                <TableHead>Pessoa de contato</TableHead>
-                <TableHead>E-mail</TableHead>
-                <TableHead>Telefone</TableHead>
-                <TableHead>Organização</TableHead>
-                <TableHead>Data de venc.</TableHead>
-                <TableHead className="w-10"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((a) => {
-                const Icon = typeIcons[a.type];
-                const contact = getContact(a.contact_id);
-                const deal = getDeal(a.deal_id);
-                const company = getCompany(a.company_id) || (contact?.company_id ? getCompany(contact.company_id) : null);
-                const overdue = isOverdue(a);
-
-                return (
-                  <TableRow
-                    key={a.id}
-                    className={`group ${a.completed_at ? "opacity-40" : ""} ${overdue ? "bg-destructive/[0.03]" : ""}`}
-                  >
-                    <TableCell className="pr-0">
-                      <Checkbox
-                        checked={!!a.completed_at}
-                        onCheckedChange={() => toggleComplete(a)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Icon className={`h-3.5 w-3.5 shrink-0 ${typeColors[a.type]}`} />
-                        <span className={`text-sm font-medium truncate ${a.completed_at ? "line-through" : ""}`}>
-                          {a.title}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {deal && (
-                        <Badge variant="secondary" className="text-[10px] font-normal max-w-[160px] truncate">
-                          {deal.title}
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {contact && (
-                        <span className="text-sm">
-                          {contact.first_name} {contact.last_name || ""}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {contact?.email && (
-                        <a href={`mailto:${contact.email}`} className="text-xs text-primary hover:underline truncate block max-w-[180px]">
-                          {contact.email}
-                        </a>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {contact?.phone && (
-                        <span className="text-xs text-muted-foreground">{contact.phone}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {company && (
-                        <span className="text-xs text-muted-foreground">{company.name}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {a.due_date && (
-                        <span className={`text-xs whitespace-nowrap ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                          {new Date(a.due_date).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent transition-all">
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setEditActivity(a)}>
-                            <Edit2 className="mr-2 h-3.5 w-3.5" />Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => removeActivity(a.id)} className="text-destructive">
-                            <Trash2 className="mr-2 h-3.5 w-3.5" />Excluir
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-              {filtered.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-16 text-muted-foreground">
-                    <div className="space-y-2">
-                      <CheckSquare className="h-8 w-8 mx-auto text-muted-foreground/40" />
-                      <p className="text-sm">Nenhuma atividade encontrada</p>
-                      <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
-                        <Plus className="mr-1.5 h-3.5 w-3.5" />Criar atividade
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+        <ActivitiesTable
+          activities={filtered}
+          contacts={contacts}
+          companies={companies}
+          deals={deals}
+          onToggleComplete={toggleComplete}
+          onEdit={setEditActivity}
+          onDelete={removeActivity}
+          onCreateClick={() => setCreateOpen(true)}
+        />
       )}
 
-      {/* Calendar View */}
       {viewMode === "calendar" && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <Button variant="outline" size="sm" onClick={() => setCalMonth((p) => {
-              const d = new Date(p.year, p.month - 1);
-              return { year: d.getFullYear(), month: d.getMonth() };
-            })}><ChevronLeft className="h-4 w-4" /></Button>
-            <h3 className="text-sm font-semibold">{monthNames[calMonth.month]} {calMonth.year}</h3>
-            <Button variant="outline" size="sm" onClick={() => setCalMonth((p) => {
-              const d = new Date(p.year, p.month + 1);
-              return { year: d.getFullYear(), month: d.getMonth() };
-            })}><ChevronRight className="h-4 w-4" /></Button>
-          </div>
-          <div className="grid grid-cols-7 gap-px rounded-lg border border-border bg-border overflow-hidden">
-            {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map((d) => (
-              <div key={d} className="bg-muted px-2 py-1.5 text-center text-[10px] font-medium text-muted-foreground">{d}</div>
-            ))}
-            {calendarDays.map((day, i) => {
-              const dateStr = day.date.toISOString().split("T")[0];
-              const dayActivities = activitiesByDate.get(dateStr) || [];
-              const isToday = dateStr === new Date().toISOString().split("T")[0];
-              return (
-                <div key={i} className={`min-h-[80px] bg-background p-1 ${!day.inMonth ? "opacity-40" : ""}`}>
-                  <div className={`text-xs font-medium mb-0.5 ${isToday ? "flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
-                    {day.date.getDate()}
-                  </div>
-                  <div className="space-y-0.5">
-                    {dayActivities.slice(0, 3).map((a) => {
-                      const ActIcon = typeIcons[a.type];
-                      return (
-                        <div key={a.id} className={`flex items-center gap-1 rounded px-1 py-0.5 text-[9px] truncate bg-muted/50 ${isOverdue(a) ? "ring-1 ring-destructive" : ""}`}>
-                          <ActIcon className={`h-2.5 w-2.5 shrink-0 ${typeColors[a.type]}`} />
-                          <span className="truncate">{a.title}</span>
-                        </div>
-                      );
-                    })}
-                    {dayActivities.length > 3 && (
-                      <span className="text-[9px] text-muted-foreground px-1">+{dayActivities.length - 3}</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <ActivitiesCalendar activities={filtered} calMonth={calMonth} onMonthChange={setCalMonth} />
       )}
 
-      {/* Create / Edit Modal */}
       <ActivityCreateEditModal
         open={createOpen || !!editActivity}
         onOpenChange={(o) => { if (!o) { setCreateOpen(false); setEditActivity(null); } }}
@@ -475,201 +120,8 @@ export default function ActivitiesScreen() {
         contacts={contacts}
         companies={companies}
         deals={deals}
-        onSaved={fetchData}
+        onSaved={refreshActivities}
       />
     </div>
-  );
-}
-
-// ─── Create / Edit Modal ────────────────────────────────────────────
-interface ModalProps {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  activity: Activity | null;
-  contacts: Contact[];
-  companies: Company[];
-  deals: Deal[];
-  onSaved: () => void;
-}
-
-function ActivityCreateEditModal({ open, onOpenChange, activity, contacts, companies, deals, onSaved }: ModalProps) {
-  const isEdit = !!activity;
-
-  const [type, setType] = useState<ActivityType>("task");
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [dealId, setDealId] = useState<string>("none");
-  const [contactId, setContactId] = useState<string>("none");
-
-  const selectedDeal = deals.find((d) => d.id === dealId);
-  const resolvedContactId = dealId !== "none" && selectedDeal?.contact_id
-    ? selectedDeal.contact_id
-    : contactId !== "none" ? contactId : null;
-  const selectedContact = contacts.find((c) => c.id === resolvedContactId);
-  const resolvedCompanyId = selectedDeal?.company_id || selectedContact?.company_id || null;
-  const resolvedCompany = companies.find((c) => c.id === resolvedCompanyId);
-
-  useEffect(() => {
-    if (activity) {
-      setType(activity.type);
-      setTitle(activity.title);
-      setBody(activity.body || "");
-      setDueDate(activity.due_date ? activity.due_date.slice(0, 16) : "");
-      setDealId(activity.deal_id || "none");
-      setContactId(activity.contact_id || "none");
-    } else {
-      setType("task");
-      setTitle("");
-      setBody("");
-      setDueDate("");
-      setDealId("none");
-      setContactId("none");
-    }
-  }, [activity, open]);
-
-  const handleDealChange = (val: string) => {
-    setDealId(val);
-    if (val !== "none") {
-      const deal = deals.find((d) => d.id === val);
-      if (deal?.contact_id) setContactId(deal.contact_id);
-    }
-  };
-
-  // owner_id setado pelo gateway — não enviar.
-  const handleSave = async () => {
-    if (!title.trim()) return;
-    const payload = {
-      type,
-      title: title.trim(),
-      body: body || null,
-      due_date: dueDate ? new Date(dueDate).toISOString() : null,
-      deal_id: dealId !== "none" ? dealId : null,
-      contact_id: resolvedContactId,
-      company_id: resolvedCompanyId,
-    };
-
-    try {
-      if (isEdit) {
-        await updateActivity(activity!.id, payload);
-        toast.success("Atividade atualizada");
-      } else {
-        await createActivity(payload);
-        toast.success("Atividade criada");
-      }
-      onOpenChange(false);
-      onSaved();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao salvar");
-    }
-  };
-
-  const typeHints: Record<ActivityType, string> = {
-    note: "Registre observações sobre contatos, negócios ou empresas",
-    task: "Crie uma tarefa com prazo",
-    meeting: "Agende uma reunião com data e horário",
-    call: "Registre uma ligação com contato e resultado",
-    email: "Crie um rascunho de email para acompanhamento",
-  };
-
-  const availableContacts = dealId !== "none" && selectedDeal?.company_id
-    ? contacts.filter((c) => c.company_id === selectedDeal.company_id || !c.company_id)
-    : contacts;
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Editar Atividade" : "Nova Atividade"}</DialogTitle>
-          <DialogDescription>{typeHints[type]}</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 mt-2">
-          <div className="flex gap-1 rounded-lg border border-border bg-muted/50 p-1">
-            {(["task", "note", "call", "meeting", "email"] as ActivityType[]).map((t) => {
-              const Icon = typeIcons[t];
-              return (
-                <button
-                  key={t}
-                  onClick={() => setType(t)}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium transition-colors ${type === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {typeLabels[t]}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">
-              {type === "note" ? "Assunto" : type === "call" ? "Resumo da ligação" : "Título"} *
-            </Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={
-              type === "note" ? "Assunto da nota..." : type === "call" ? "Resumo da ligação..." : type === "meeting" ? "Nome da reunião..." : type === "email" ? "Assunto do email..." : "Título da tarefa..."
-            } />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">
-              {type === "note" ? "Conteúdo" : type === "call" ? "Notas da ligação" : type === "meeting" ? "Pauta / Notas" : type === "email" ? "Corpo do email" : "Descrição"}
-            </Label>
-            <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={type === "note" || type === "email" ? 6 : 3} />
-          </div>
-
-          {(type === "task" || type === "meeting" || type === "call") && (
-            <div className="space-y-1">
-              <Label className="text-xs">
-                {type === "meeting" ? "Data/hora" : type === "call" ? "Data/hora da ligação" : "Prazo"}
-              </Label>
-              <Input type="datetime-local" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-            </div>
-          )}
-
-          <div className="space-y-1">
-            <Label className="text-xs">Negócio</Label>
-            <Select value={dealId} onValueChange={handleDealChange}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Nenhum</SelectItem>
-                {deals.map((d) => <SelectItem key={d.id} value={d.id}>{d.title}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">Contato</Label>
-            <Select
-              value={resolvedContactId || "none"}
-              onValueChange={(v) => setContactId(v)}
-              disabled={dealId !== "none" && !!selectedDeal?.contact_id}
-            >
-              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Nenhum</SelectItem>
-                {availableContacts.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.first_name} {c.last_name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {dealId !== "none" && selectedDeal?.contact_id && (
-              <p className="text-[10px] text-muted-foreground">Preenchido automaticamente pelo negócio</p>
-            )}
-          </div>
-
-          {resolvedCompany && (
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Empresa (vinculada automaticamente)</Label>
-              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                🏢 {resolvedCompany.name}
-              </div>
-            </div>
-          )}
-
-          <Button onClick={handleSave} className="w-full" disabled={!title.trim()}>
-            {isEdit ? "Salvar Alterações" : "Criar Atividade"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }

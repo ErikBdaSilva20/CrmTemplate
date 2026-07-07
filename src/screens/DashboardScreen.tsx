@@ -1,610 +1,291 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
-import { ParticlesCanvas } from "@/components/ParticlesCanvas";
-import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { DashboardHeader } from '@/components/crm/dashboard/DashboardHeader';
+import { DashboardKpiCards } from '@/components/crm/dashboard/DashboardKpiCards';
+import { RevenueSection } from '@/components/crm/dashboard/RevenueSection';
+import { TopDealsCard } from '@/components/crm/dashboard/TopDealsCard';
+import { ActivitiesTypeChart } from '@/components/crm/dashboard/ActivitiesTypeChart';
+import { ActivitiesByDayChart } from '@/components/crm/dashboard/ActivitiesByDayChart';
+import { NewLeadsByStatusChart } from '@/components/crm/dashboard/NewLeadsByStatusChart';
+import { RiskDealsSection } from '@/components/crm/dashboard/RiskDealsSection';
+import { BantEfficiencyCard } from '@/components/crm/dashboard/BantEfficiencyCard';
+import { useActivities } from '@/hooks/useActivities';
+import { useCompanies } from '@/hooks/useCompanies';
+import { useContacts } from '@/hooks/useContacts';
+import { useDeals } from '@/hooks/useDeals';
+import { usePipelines, useStages } from '@/hooks/usePipelines';
+import { useSalesGoals } from '@/hooks/useSalesGoals';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Line, AreaChart, Area, Legend,
-} from "recharts";
-import {
-  DollarSign, Users, Handshake, TrendingUp, TrendingDown,
-  Target, Clock, AlertTriangle, RefreshCw, ArrowRight,
-  CalendarDays, BarChart3,
-} from "lucide-react";
-import {
-  listDeals, listStages, listActivities, listContacts, listPipelines,
-  type Deal, type PipelineStage, type Activity, type Contact, type Pipeline,
-} from "@/lib/data";
-import { formatCurrencyCompact as fmt } from "@/lib/format";
+  computeActivitiesByDayOfWeek,
+  computeActivitiesByType,
+  computeAtRiskDeals,
+  computeAverageSalesCycleDays,
+  computeNewLeadsByStatus,
+  computePercentage,
+  selectTopDeals,
+} from '@/lib/analytics';
+import { DEFAULT_MONTHLY_REVENUE_GOAL } from '@/lib/constants';
+import { enrichDeals } from '@/lib/data';
+import { type Interval, type Period, previousInterval, resolvePeriod } from '@/lib/period';
+import { aggregateByMonth, filterByInterval } from '@/lib/periodAggregation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0);
+const REVENUE_CHART_MIN_ANNUAL_SPAN_MS = 365 * 86_400_000;
 
-const tooltipStyle = {
-  backgroundColor: "hsl(var(--popover))",
-  border: "1px solid hsl(var(--border))",
-  borderRadius: "var(--radius)",
-  color: "hsl(var(--popover-foreground))",
-  fontSize: 11,
-};
-
-const CHART_COLORS = [
-  "hsl(148, 62%, 40%)", // verde MasIA
-  "hsl(186, 78%, 42%)", // teal/ciano
-  "hsl(43, 90%, 50%)",  // ouro
-  "hsl(148, 50%, 56%)", // verde claro
-  "hsl(186, 65%, 56%)", // ciano claro
-  "hsl(0, 72%, 58%)",   // vermelho
-  "hsl(262, 72%, 60%)", // roxo
-  "hsl(43, 75%, 62%)",  // ouro claro
-];
-
-const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-
-type PeriodFilter = "today" | "this_week" | "this_month" | "this_quarter" | "this_year" | "all";
-
-function getPeriodStart(period: PeriodFilter): Date | null {
-  const now = new Date();
-  switch (period) {
-    case "today": return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    case "this_week": { const d = new Date(now); d.setDate(d.getDate() - d.getDay()); d.setHours(0, 0, 0, 0); return d; }
-    case "this_month": return new Date(now.getFullYear(), now.getMonth(), 1);
-    case "this_quarter": return new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-    case "this_year": return new Date(now.getFullYear(), 0, 1);
-    case "all": return null;
+// Visão Anual (jan-dez do ano do Período) sempre que o Período for um Ano
+// específico ou cobrir >= 1 ano (FR-7, PRD §8 Q2, decisão confirmada). É uma
+// decisão de exibição do gráfico do Dashboard, não um conceito de Período
+// reutilizável — por isso vive aqui, não em src/lib/period.ts.
+function isAnnualPeriod(period: Period, interval: Interval): boolean {
+  if (period.kind === 'year') return true;
+  if (period.kind === 'preset' && period.preset === 'this_year') return true;
+  if (interval.start && interval.end) {
+    return interval.end.getTime() - interval.start.getTime() >= REVENUE_CHART_MIN_ANNUAL_SPAN_MS;
   }
+  return false;
 }
 
-function inPeriod(dateStr: string | null, start: Date | null): boolean {
-  if (!start || !dateStr) return true;
-  return new Date(dateStr) >= start;
+// Mês específico que o card de meta deve usar: o próprio Período quando ele
+// já resolve a um único mês-calendário; caso contrário `null` (o chamador
+// decide o fallback — hoje é sempre o mês-calendário atual, ver FR-8).
+function resolveGoalMonth(period: Period, now: Date): { month: number; year: number } | null {
+  if (period.kind === 'month') return { month: period.month, year: period.year };
+  if (period.kind === 'preset' && period.preset === 'this_month') return { month: now.getMonth() + 1, year: now.getFullYear() };
+  return null;
 }
 
-// ── Gauge component ─────────────────────────
-function GaugeChart({ value, max, label }: { value: number; max: number; label: string }) {
-  const percentage = max > 0 ? Math.min((value / max) * 100, 100) : 0;
-  const angle = (percentage / 100) * 180;
-  const color = percentage >= 100 ? "hsl(var(--success))" : percentage >= 70 ? "hsl(var(--primary))" : percentage >= 40 ? "hsl(var(--warning))" : "hsl(var(--destructive))";
+const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
-  return (
-    <div className="flex flex-col items-center">
-      <svg viewBox="0 0 200 120" className="w-full max-w-[200px]">
-        <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="hsl(var(--muted))" strokeWidth="14" strokeLinecap="round" />
-        <path
-          d="M 20 100 A 80 80 0 0 1 180 100"
-          fill="none"
-          stroke={color}
-          strokeWidth="14"
-          strokeLinecap="round"
-          strokeDasharray={`${(angle / 180) * 251.2} 251.2`}
-        />
-        <text x="100" y="85" textAnchor="middle" className="fill-foreground" fontSize="28" fontWeight="700">
-          {Math.round(percentage)}%
-        </text>
-        <text x="100" y="110" textAnchor="middle" fill="hsl(var(--muted-foreground))" fontSize="10">
-          {label}
-        </text>
-      </svg>
-      <p className="text-xs text-muted-foreground mt-1">{fmt(value)} / {fmt(max)}</p>
-    </div>
-  );
-}
-
-// ── Main ─────────────────────────────────────
+// Orquestrador de layout: busca os dados, calcula os agregados via
+// lib/analytics.ts (puro/testável) e delega toda a renderização visual para
+// os subcomponentes em components/crm/dashboard/**
+// (ver Masia Clone-Template Audit Framework §4/§6.1 — "God Component" split).
 export default function DashboardScreen() {
-  const navigate = useNavigate();
+  const { data: deals, loading: dealsLoading, refresh: refreshDeals } = useDeals();
+  const { data: stages, refresh: refreshStages } = useStages();
+  const { data: activities, refresh: refreshActivities } = useActivities();
+  const { data: contacts, refresh: refreshContacts } = useContacts();
+  const { data: pipelines, refresh: refreshPipelines } = usePipelines();
+  const { data: salesGoals, refresh: refreshSalesGoals } = useSalesGoals();
+  const { data: companies } = useCompanies();
 
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [stages, setStages] = useState<PipelineStage[]>([]);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
-  const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [period, setPeriod] = useState<Period>({ kind: 'preset', preset: 'this_month' });
+  const [pipelineFilter, setPipelineFilter] = useState('all');
+  const now = new Date();
 
-  const [period, setPeriod] = useState<PeriodFilter>("this_month");
-  const [pipelineFilter, setPipelineFilter] = useState("all");
-
-  const monthlyGoal = 100000;
-
-  // Sem org_id, sem RPC — agrega no front sobre os repos.
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    const [dealsAll, stagesAll, activitiesAll, contactsAll, pipelinesAll] = await Promise.all([
-      listDeals(), listStages(), listActivities(), listContacts(), listPipelines(),
-    ]);
-    setDeals(dealsAll);
-    setStages(stagesAll);
-    setActivities(activitiesAll);
-    setContacts(contactsAll);
-    setPipelines(pipelinesAll);
-    setLoading(false);
+  // Estável via useCallback (as próprias refreshX vêm de useCallback([])
+  // dentro de data-cache.ts) — evita reintroduzir o anti-padrão do
+  // eslint-disable que a auditoria original mandou eliminar (§5.4).
+  const refreshAll = useCallback(() => {
     setLastRefresh(new Date());
-  }, []);
-
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+    return Promise.all([
+      refreshDeals(),
+      refreshStages(),
+      refreshActivities(),
+      refreshContacts(),
+      refreshPipelines(),
+      refreshSalesGoals(),
+    ]);
+  }, [refreshDeals, refreshStages, refreshActivities, refreshContacts, refreshPipelines, refreshSalesGoals]);
 
   useEffect(() => {
-    const timer = setInterval(fetchAll, 5 * 60 * 1000);
+    const timer = setInterval(refreshAll, REFRESH_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [fetchAll]);
+  }, [refreshAll]);
 
-  const periodStart = getPeriodStart(period);
+  // Camada compartilhada de Período (src/lib/period.ts) — única fonte de
+  // resolução de datas do Dashboard, substitui getPeriodStart/isInPeriod.
+  const periodInterval = useMemo(() => resolvePeriod(period, now), [period]);
 
   const filteredDeals = useMemo(() => {
     let list = deals;
-    if (pipelineFilter !== "all") {
+    if (pipelineFilter !== 'all') {
       const pipeStages = stages.filter((s) => s.pipeline_id === pipelineFilter).map((s) => s.id);
       list = list.filter((d) => d.stage_id && pipeStages.includes(d.stage_id));
     }
     return list;
   }, [deals, pipelineFilter, stages]);
 
-  const periodDeals = useMemo(() =>
-    filteredDeals.filter((d) => inPeriod(d.created_at, periodStart)),
-    [filteredDeals, periodStart]
+  const periodDeals = useMemo(
+    () => filterByInterval(filteredDeals, periodInterval, (d) => d.created_at),
+    [filteredDeals, periodInterval]
   );
 
-  const filteredActivities = useMemo(() =>
-    activities.filter((a) => inPeriod(a.created_at, periodStart)),
-    [activities, periodStart]
+  const filteredActivities = useMemo(
+    () => filterByInterval(activities, periodInterval, (a) => a.created_at),
+    [activities, periodInterval]
   );
 
-  // ── KPIs ───────────────────────────
-  const wonDeals = periodDeals.filter((d) => d.status === "won");
-  const lostDeals = periodDeals.filter((d) => d.status === "lost");
-  const openDeals = filteredDeals.filter((d) => d.status === "open");
-  const totalClosed = wonDeals.length + lostDeals.length;
-  const wonRevenue = wonDeals.reduce((s, d) => s + (Number(d.value) || 0), 0);
-  const winRate = pct(wonDeals.length, totalClosed);
-  const avgTicket = wonDeals.length > 0 ? wonRevenue / wonDeals.length : 0;
-  const pipelineValue = openDeals.reduce((s, d) => s + (Number(d.value) || 0), 0);
+  const periodContacts = useMemo(
+    () => filterByInterval(contacts, periodInterval, (c) => c.created_at),
+    [contacts, periodInterval]
+  );
 
-  const avgCycle = useMemo(() => {
-    if (wonDeals.length === 0) return 0;
-    const total = wonDeals.reduce((s, d) => {
-      const created = new Date(d.created_at);
-      const updated = d.updated_at ? new Date(d.updated_at) : new Date();
-      return s + Math.floor((updated.getTime() - created.getTime()) / 86400000);
-    }, 0);
-    return Math.round(total / wonDeals.length);
-  }, [wonDeals]);
+  // ── KPIs ─────────────────────────── (memoizado — mesmo padrão do resto
+  // do arquivo; sem isso, todo re-render do Dashboard refaz filter/reduce
+  // nos deals do período mesmo quando periodDeals/filteredDeals não mudam).
+  const { wonDeals, openDeals, totalClosed, wonRevenue, winRate, avgTicket, pipelineValue } = useMemo(() => {
+    const wonDeals = periodDeals.filter((d) => d.status === 'won');
+    const openDeals = filteredDeals.filter((d) => d.status === 'open');
+    const totalClosed = wonDeals.length + periodDeals.filter((d) => d.status === 'lost').length;
+    const wonRevenue = wonDeals.reduce((s, d) => s + d.value, 0);
+    const winRate = computePercentage(wonDeals.length, totalClosed);
+    const avgTicket = wonDeals.length > 0 ? wonRevenue / wonDeals.length : 0;
+    const pipelineValue = openDeals.reduce((s, d) => s + d.value, 0);
+    return { wonDeals, openDeals, totalClosed, wonRevenue, winRate, avgTicket, pipelineValue };
+  }, [periodDeals, filteredDeals]);
+  const avgCycle = useMemo(() => computeAverageSalesCycleDays(wonDeals), [wonDeals]);
 
+  // Variação Período-a-Período (FR-6): previousInterval é genérica para
+  // qualquer Período, corrigindo o bug em que "Este ano"/"Esta semana"
+  // sempre caíam em variação 0 (Auditoria §Bloco 1).
+  const prevInterval = useMemo(() => previousInterval(period, now), [period]);
   const prevPeriodRevenue = useMemo(() => {
-    if (period === "all") return 0;
-    const now = new Date();
-    let prevStart: Date;
-    let prevEnd: Date;
-    switch (period) {
-      case "this_month":
-        prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        prevEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-        break;
-      case "this_quarter": {
-        const qStart = Math.floor(now.getMonth() / 3) * 3;
-        prevStart = new Date(now.getFullYear(), qStart - 3, 1);
-        prevEnd = new Date(now.getFullYear(), qStart, 0);
-        break;
-      }
-      default:
-        return 0;
-    }
-    return filteredDeals
-      .filter((d) => d.status === "won" && d.created_at && new Date(d.created_at) >= prevStart && new Date(d.created_at) <= prevEnd)
-      .reduce((s, d) => s + (Number(d.value) || 0), 0);
-  }, [filteredDeals, period]);
+    if (!prevInterval) return 0;
+    return filterByInterval(filteredDeals, prevInterval, (d) => d.created_at)
+      .filter((d) => d.status === 'won')
+      .reduce((sum, d) => sum + d.value, 0);
+  }, [filteredDeals, prevInterval]);
+  const revenueVariation =
+    prevPeriodRevenue > 0 ? Math.round(((wonRevenue - prevPeriodRevenue) / prevPeriodRevenue) * 100) : 0;
 
-  const revenueVariation = prevPeriodRevenue > 0 ? Math.round(((wonRevenue - prevPeriodRevenue) / prevPeriodRevenue) * 100) : 0;
+  // FR-7: Visão Anual (jan-dez do ano do Período) quando o Período for um
+  // Ano específico ou cobrir >= 1 ano; presets curtos/mês específico/"tudo"
+  // mantêm "últimos 12 meses" como contexto rotulado (decisão confirmada,
+  // PRD §8 Q2) em vez de ocultar o gráfico ou mostrar só o Período curto.
+  const isAnnual = useMemo(() => isAnnualPeriod(period, periodInterval), [period, periodInterval]);
+
+  const revenueInterval = useMemo(() => {
+    if (isAnnual) return periodInterval;
+    const anchor = new Date();
+    return {
+      start: new Date(anchor.getFullYear(), anchor.getMonth() - 11, 1),
+      end: new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1),
+      label: 'Últimos 12 meses',
+    };
+  }, [isAnnual, periodInterval]);
+
+  const revenueChartTitle = isAnnual
+    ? `Receita Mensal — ${periodInterval.label}`
+    : 'Receita Mensal — Últimos 12 meses (contexto)';
 
   const monthlyRevenue = useMemo(() => {
-    const now = new Date();
-    const data: { month: string; receita: number; tendencia: number }[] = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthWon = filteredDeals.filter((deal) => {
-        if (deal.status !== "won" || !deal.created_at) return false;
-        const c = new Date(deal.created_at);
-        return c.getFullYear() === d.getFullYear() && c.getMonth() === d.getMonth();
-      });
-      data.push({
-        month: MONTHS_PT[d.getMonth()],
-        receita: monthWon.reduce((s, deal) => s + (Number(deal.value) || 0), 0),
-        tendencia: 0,
-      });
-    }
-    for (let i = 0; i < data.length; i++) {
-      const window = data.slice(Math.max(0, i - 2), i + 1);
-      data[i].tendencia = Math.round(window.reduce((s, d) => s + d.receita, 0) / window.length);
-    }
-    return data;
-  }, [filteredDeals]);
-
-  const funnelData = useMemo(() => {
-    const pipeStages = pipelineFilter !== "all"
-      ? stages.filter((s) => s.pipeline_id === pipelineFilter)
-      : stages;
-    return [...pipeStages].sort((a, b) => a.sort_order - b.sort_order).map((s) => {
-      const stageDeals = openDeals.filter((d) => d.stage_id === s.id);
-      return {
-        name: s.name,
-        count: stageDeals.length,
-        value: stageDeals.reduce((sum, d) => sum + (Number(d.value) || 0), 0),
-        color: s.color || "hsl(var(--primary))",
-      };
+    const points = aggregateByMonth(filteredDeals, revenueInterval, (d) => d.created_at, (group) =>
+      group.filter((d) => d.status === 'won').reduce((sum, d) => sum + d.value, 0)
+    );
+    // Média móvel de 3 meses — mesma janela do computeMonthlyRevenue antigo.
+    return points.map((p, i) => {
+      const window = points.slice(Math.max(0, i - 2), i + 1);
+      const tendencia = Math.round(window.reduce((sum, w) => sum + w.value, 0) / window.length);
+      return { month: p.month.label, receita: p.value, tendencia };
     });
-  }, [stages, openDeals, pipelineFilter]);
+  }, [filteredDeals, revenueInterval]);
 
-  const actByType = useMemo(() => {
-    const map: Record<string, number> = {};
-    filteredActivities.forEach((a) => { map[a.type] = (map[a.type] || 0) + 1; });
-    const labels: Record<string, string> = { call: "Ligação", email: "Email", meeting: "Reunião", note: "Nota", task: "Tarefa" };
-    return Object.entries(map).map(([type, count]) => ({ name: labels[type] || type, value: count }));
-  }, [filteredActivities]);
+  const topDeals = useMemo(() => {
+    const enriched = enrichDeals(openDeals, contacts, companies);
+    return selectTopDeals(enriched);
+  }, [openDeals, contacts, companies]);
 
-  const actByDay = useMemo(() => {
-    const days = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-    const counts = new Array(7).fill(0);
-    filteredActivities.forEach((a) => {
-      if (a.created_at) counts[new Date(a.created_at).getDay()]++;
-    });
-    return days.map((d, i) => ({ day: d, count: counts[i] }));
-  }, [filteredActivities]);
+  const actByType = useMemo(() => computeActivitiesByType(filteredActivities), [filteredActivities]);
+  const actByDay = useMemo(() => computeActivitiesByDayOfWeek(filteredActivities), [filteredActivities]);
+  const atRiskDeals = useMemo(() => computeAtRiskDeals(openDeals), [openDeals]);
+  const newLeadsByStatus = useMemo(() => computeNewLeadsByStatus(periodContacts), [periodContacts]);
 
-  const atRiskDeals = useMemo(() => {
-    const now = new Date();
-    const fourteenDaysAgo = new Date(now.getTime() - 14 * 86400000);
-    const sevenDaysFromNow = new Date(now.getTime() + 7 * 86400000);
+  // FR-8: meta respeita o Período. Mês específico (ou "Este mês") mostra
+  // meta x realizado daquele mês; Visão Anual (mesmo critério do FR-7) vira
+  // resumo anual; qualquer outro Período (hoje/semana/trimestre/"tudo") cai
+  // no mês-calendário atual — sales_goals só tem period_month/period_year,
+  // não há granularidade semanal/trimestral no modelo de dados.
+  const goalTargetMonth = resolveGoalMonth(period, now) ?? { month: now.getMonth() + 1, year: now.getFullYear() };
 
-    const inactive = openDeals.filter((d) => {
-      if (!d.updated_at) return true;
-      return new Date(d.updated_at) < fourteenDaysAgo;
-    }).sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0)).slice(0, 5);
+  const goalMonthInterval = useMemo(
+    () => resolvePeriod({ kind: 'month', year: goalTargetMonth.year, month: goalTargetMonth.month }),
+    [goalTargetMonth.year, goalTargetMonth.month]
+  );
+  const goalMonthRevenue = useMemo(
+    () =>
+      filterByInterval(filteredDeals, goalMonthInterval, (d) => d.created_at)
+        .filter((d) => d.status === 'won')
+        .reduce((sum, d) => sum + d.value, 0),
+    [filteredDeals, goalMonthInterval]
+  );
+  const monthlyGoalTarget = useMemo(() => {
+    const goal = salesGoals.find(
+      (g) => g.goal_type === 'revenue' && g.period_month === goalTargetMonth.month && g.period_year === goalTargetMonth.year
+    );
+    return goal ? (goal.target_value ?? DEFAULT_MONTHLY_REVENUE_GOAL) : DEFAULT_MONTHLY_REVENUE_GOAL;
+  }, [salesGoals, goalTargetMonth.month, goalTargetMonth.year]);
 
-    const closingSoon = openDeals.filter((d) => {
-      if (!d.close_date) return false;
-      const cd = new Date(d.close_date);
-      return cd <= sevenDaysFromNow && (Number(d.probability) || 0) < 50;
-    }).sort((a, b) => new Date(a.close_date!).getTime() - new Date(b.close_date!).getTime());
+  // Resumo anual: meta = soma das metas mensais registradas naquele ano (ou
+  // uma estimativa de 12x a meta default, se nenhuma meta estiver
+  // cadastrada); realizado = soma dos pontos mensais já calculados acima
+  // para o gráfico de receita (mesmo intervalo quando isAnnual, sem
+  // recalcular a agregação por card — NFR de performance do PRD §4.2).
+  const annualGoalTarget = useMemo(() => {
+    if (!isAnnual || !periodInterval.start) return 0;
+    const year = periodInterval.start.getFullYear();
+    const yearGoals = salesGoals.filter((g) => g.goal_type === 'revenue' && g.period_year === year);
+    return yearGoals.length > 0
+      ? yearGoals.reduce((sum, g) => sum + (g.target_value ?? 0), 0)
+      : DEFAULT_MONTHLY_REVENUE_GOAL * 12;
+  }, [isAnnual, periodInterval, salesGoals]);
+  const annualGoalActual = useMemo(
+    () => (isAnnual ? monthlyRevenue.reduce((sum, p) => sum + p.receita, 0) : 0),
+    [isAnnual, monthlyRevenue]
+  );
 
-    return { inactive, closingSoon };
-  }, [openDeals]);
-
-  const newLeadsByStatus = useMemo(() => {
-    const periodContacts = contacts.filter((c) => inPeriod(c.created_at, periodStart));
-    const map: Record<string, number> = {};
-    periodContacts.forEach((c) => {
-      const s = c.status || "lead";
-      map[s] = (map[s] || 0) + 1;
-    });
-    const labels: Record<string, string> = { lead: "Lead", prospect: "Prospect", customer: "Cliente", churned: "Churned" };
-    return Object.entries(map).map(([k, v]) => ({ name: labels[k] || k, value: v }));
-  }, [contacts, periodStart]);
+  const goalLabel = isAnnual ? 'Meta do Ano' : 'Meta do Mês';
+  const goalValue = isAnnual ? annualGoalActual : goalMonthRevenue;
+  const goalTarget = isAnnual ? annualGoalTarget : monthlyGoalTarget;
 
   return (
     <div className="space-y-5">
-      {/* ── Hero Header ── */}
-      <div className="dashboard-hero relative overflow-hidden rounded-xl border px-4 py-5 shadow-sm">
-        <ParticlesCanvas />
-        <div className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-xs text-muted-foreground">
-              Atualizado {lastRefresh.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Select value={period} onValueChange={(v) => setPeriod(v as PeriodFilter)}>
-              <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">Hoje</SelectItem>
-                <SelectItem value="this_week">Esta semana</SelectItem>
-                <SelectItem value="this_month">Este mês</SelectItem>
-                <SelectItem value="this_quarter">Trimestre</SelectItem>
-                <SelectItem value="this_year">Este ano</SelectItem>
-                <SelectItem value="all">Tudo</SelectItem>
-              </SelectContent>
-            </Select>
-            {pipelines.length > 1 && (
-              <Select value={pipelineFilter} onValueChange={setPipelineFilter}>
-                <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos pipelines</SelectItem>
-                  {pipelines.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            )}
-            <Button variant="outline" size="sm" className="h-8" onClick={fetchAll} disabled={loading}>
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            </Button>
-          </div>
-        </div>
-      </div>
+      <DashboardHeader
+        lastRefresh={lastRefresh}
+        period={period}
+        onPeriodChange={setPeriod}
+        pipelines={pipelines}
+        pipelineFilter={pipelineFilter}
+        onPipelineFilterChange={setPipelineFilter}
+        onRefresh={refreshAll}
+        refreshing={dealsLoading}
+      />
 
-      {/* ── KPI Cards ── */}
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <Card className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => navigate("/deals")}>
-          <CardContent className="p-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Receita</span>
-              <DollarSign className="h-3.5 w-3.5 text-success" />
-            </div>
-            <p className="text-xl font-bold">{fmt(wonRevenue)}</p>
-            {revenueVariation !== 0 && (
-              <div className={`flex items-center gap-0.5 text-[10px] ${revenueVariation > 0 ? "text-success" : "text-destructive"}`}>
-                {revenueVariation > 0 ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
-                {revenueVariation > 0 ? "+" : ""}{revenueVariation}% vs anterior
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      <DashboardKpiCards
+        kpis={{
+          wonRevenue,
+          revenueVariation,
+          wonDealsCount: wonDeals.length,
+          pipelineValue,
+          winRate,
+          totalClosed,
+          avgTicket,
+          avgCycle,
+          contactsCount: contacts.length,
+          newContactsCount: periodContacts.length,
+        }}
+      />
 
-        <Card className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => navigate("/deals")}>
-          <CardContent className="p-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Ganhos</span>
-              <Handshake className="h-3.5 w-3.5 text-success" />
-            </div>
-            <p className="text-xl font-bold">{wonDeals.length}</p>
-            <p className="text-[10px] text-muted-foreground">{fmt(pipelineValue)} em pipeline</p>
-          </CardContent>
-        </Card>
+      <RevenueSection
+        monthlyRevenue={monthlyRevenue}
+        title={revenueChartTitle}
+        goalLabel={goalLabel}
+        goalValue={goalValue}
+        goalTarget={goalTarget}
+      />
 
-        <Card className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => navigate("/deals")}>
-          <CardContent className="p-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Win Rate</span>
-              <Target className="h-3.5 w-3.5 text-primary" />
-            </div>
-            <p className="text-xl font-bold">{winRate}%</p>
-            <p className="text-[10px] text-muted-foreground">{totalClosed} fechados</p>
-          </CardContent>
-        </Card>
-
-        <Card className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => navigate("/deals")}>
-          <CardContent className="p-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Ticket Médio</span>
-              <BarChart3 className="h-3.5 w-3.5 text-primary" />
-            </div>
-            <p className="text-xl font-bold">{fmt(avgTicket)}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => navigate("/activities")}>
-          <CardContent className="p-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Ciclo Médio</span>
-              <Clock className="h-3.5 w-3.5 text-warning" />
-            </div>
-            <p className="text-xl font-bold">{avgCycle}</p>
-            <p className="text-[10px] text-muted-foreground">dias</p>
-          </CardContent>
-        </Card>
-
-        <Card className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => navigate("/contacts")}>
-          <CardContent className="p-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Contatos</span>
-              <Users className="h-3.5 w-3.5 text-primary" />
-            </div>
-            <p className="text-xl font-bold">{contacts.length}</p>
-            <p className="text-[10px] text-muted-foreground">{contacts.filter((c) => inPeriod(c.created_at, periodStart)).length} novos</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── Row 1: Revenue chart + Goal gauge ── */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Receita Mensal (últimos 12 meses)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={monthlyRevenue}>
-                <defs>
-                  <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v) => fmt(Number(v))} />
-                <Area type="monotone" dataKey="receita" stroke="hsl(var(--primary))" fill="url(#colorRevenue)" strokeWidth={2} />
-                <Line type="monotone" dataKey="tendencia" stroke="hsl(var(--warning))" strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Meta do Mês</CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center justify-center">
-            <GaugeChart value={wonRevenue} max={monthlyGoal} label={fmt(monthlyGoal)} />
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <TopDealsCard topDeals={topDeals} totalOpenCount={openDeals.length} activities={activities} />
+        <ActivitiesTypeChart data={actByType} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm">Pipeline por Estágio</CardTitle>
-              <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => navigate("/deals")}>
-                Ver pipeline <ArrowRight className="ml-1 h-3 w-3" />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {funnelData.length > 0 ? (
-              <div className="space-y-2">
-                {funnelData.map((s) => {
-                  const maxVal = Math.max(...funnelData.map((f) => f.value), 1);
-                  return (
-                    <div key={s.name}>
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-xs font-medium">{s.name}</span>
-                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                          <span>{s.count} negócios</span>
-                          <span className="font-medium text-foreground">{fmt(s.value)}</span>
-                        </div>
-                      </div>
-                      <div className="h-5 rounded bg-muted overflow-hidden">
-                        <div
-                          className="h-full rounded transition-all flex items-center justify-end pr-1"
-                          style={{
-                            width: `${Math.max((s.value / maxVal) * 100, 3)}%`,
-                            backgroundColor: s.color,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="flex h-[200px] items-center justify-center text-muted-foreground text-sm">Nenhum dado</div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Atividades por Tipo</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {actByType.length > 0 ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={actByType} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2}>
-                    {actByType.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-[220px] items-center justify-center text-muted-foreground text-sm">Nenhuma atividade</div>
-            )}
-          </CardContent>
-        </Card>
+        <ActivitiesByDayChart data={actByDay} />
+        <NewLeadsByStatusChart data={newLeadsByStatus} />
       </div>
 
-      {/* ── Row 3: Activity heatmap + New leads ── */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Atividades por Dia da Semana</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={actByDay}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="day" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      <RiskDealsSection atRiskDeals={atRiskDeals} />
 
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm">Novos Contatos por Status</CardTitle>
-              <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => navigate("/contacts")}>
-                Ver todos <ArrowRight className="ml-1 h-3 w-3" />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {newLeadsByStatus.length > 0 ? (
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={newLeadsByStatus}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="value" radius={[3, 3, 0, 0]}>
-                    {newLeadsByStatus.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-[180px] items-center justify-center text-muted-foreground text-sm">Nenhum dado</div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── Row 4: At-risk deals ── */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-1.5">
-              <AlertTriangle className="h-4 w-4 text-destructive" />Negócios sem Atividade ({">"}14 dias)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {atRiskDeals.inactive.length > 0 ? (
-              <div className="space-y-2">
-                {atRiskDeals.inactive.map((d) => {
-                  const daysSince = d.updated_at ? Math.floor((Date.now() - new Date(d.updated_at).getTime()) / 86400000) : 999;
-                  return (
-                    <div key={d.id} className="flex items-center justify-between rounded-md border border-destructive/20 bg-destructive/5 p-2 cursor-pointer hover:bg-destructive/10 transition-colors" onClick={() => navigate(`/deals/${d.id}`)}>
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium truncate">{d.title}</p>
-                        <p className="text-[10px] text-muted-foreground">{daysSince} dias sem atividade</p>
-                      </div>
-                      <span className="text-xs font-bold text-destructive shrink-0">{fmt(Number(d.value) || 0)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="flex h-[120px] items-center justify-center text-muted-foreground text-sm">Nenhum negócio em risco 🎉</div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-1.5">
-              <CalendarDays className="h-4 w-4 text-warning" />Fechamento Próximo (prob {"<"} 50%)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {atRiskDeals.closingSoon.length > 0 ? (
-              <div className="space-y-2">
-                {atRiskDeals.closingSoon.slice(0, 5).map((d) => {
-                  const daysLeft = d.close_date ? Math.ceil((new Date(d.close_date).getTime() - Date.now()) / 86400000) : 0;
-                  return (
-                    <div key={d.id} className="flex items-center justify-between rounded-md border border-warning/20 bg-warning/5 p-2 cursor-pointer hover:bg-warning/10 transition-colors" onClick={() => navigate(`/deals/${d.id}`)}>
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium truncate">{d.title}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {daysLeft <= 0 ? "Vencido" : `${daysLeft} dias`} · {Number(d.probability) || 0}% prob
-                        </p>
-                      </div>
-                      <span className="text-xs font-bold text-warning shrink-0">{fmt(Number(d.value) || 0)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="flex h-[120px] items-center justify-center text-muted-foreground text-sm">Nenhum negócio com fechamento próximo</div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <BantEfficiencyCard deals={periodDeals} />
     </div>
   );
 }

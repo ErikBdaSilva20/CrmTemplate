@@ -65,7 +65,7 @@ export default function LoginScreen() {
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
             <Handshake className="h-6 w-6 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">FlowCRM</h1>
+          <h1 className="text-2xl font-bold tracking-tight">CellRM</h1>
           <p className="text-sm text-muted-foreground">
             Gerencie seus relacionamentos com inteligência
           </p>

@@ -2,15 +2,17 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Shield, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
+import { Shield, CheckCircle2, XCircle, HelpCircle, AlertTriangle, Target, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { updateDeal, type DealQualification as BANTData } from "@/lib/data";
+import { BantBadge } from "@/components/crm/BantBadge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const bantCriteria = [
-  { key: "budget" as const, label: "Budget", description: "O prospect tem orçamento disponível?", icon: "💰" },
-  { key: "authority" as const, label: "Authority", description: "Estamos falando com o decisor?", icon: "👤" },
-  { key: "need" as const, label: "Need", description: "Existe uma necessidade real e urgente?", icon: "🎯" },
-  { key: "timeline" as const, label: "Timeline", description: "Há um prazo definido para decisão?", icon: "⏰" },
+  { key: "budget" as const, label: "Budget (Orçamento)", description: "O prospect tem orçamento disponível?", icon: "💰", action: "descobrir o limite de gastos" },
+  { key: "authority" as const, label: "Authority (Autoridade)", description: "Estamos falando com o decisor?", icon: "👤", action: "identificar quem assina o cheque" },
+  { key: "need" as const, label: "Need (Necessidade)", description: "Existe uma necessidade real e urgente?", icon: "🎯", action: "mapear a dor principal" },
+  { key: "timeline" as const, label: "Timeline (Urgência)", description: "Há um prazo definido para decisão?", icon: "⏰", action: "entender para quando precisam da solução" },
 ];
 
 function calcQualScore(data: BANTData): number {
@@ -21,28 +23,15 @@ function calcQualScore(data: BANTData): number {
   return score;
 }
 
-function getScoreColor(score: number) {
-  if (score >= 75) return "text-success";
-  if (score >= 50) return "text-warning";
-  if (score >= 25) return "text-primary";
-  return "text-muted-foreground";
-}
-
-function getProgressColor(score: number) {
-  if (score >= 75) return "bg-success";
-  if (score >= 50) return "bg-warning";
-  if (score >= 25) return "bg-primary";
-  return "bg-muted-foreground";
-}
-
 interface Props {
   dealId: string;
   qualification: BANTData | null;
   qualificationScore: number;
+  isLateStage?: boolean;
   onUpdate: () => void;
 }
 
-export function DealQualification({ dealId, qualification, onUpdate }: Props) {
+export function DealQualification({ dealId, qualification, isLateStage, onUpdate }: Props) {
   const [bant, setBant] = useState<BANTData>({
     budget: null, authority: null, need: null, timeline: null,
     budget_notes: "", authority_notes: "", need_notes: "", timeline_notes: "",
@@ -69,42 +58,88 @@ export function DealQualification({ dealId, qualification, onUpdate }: Props) {
     setBant({ ...bant, [key]: next });
   };
 
+  const missingCriteria = bantCriteria.filter(c => bant[c.key] !== true);
+  const nextMission = missingCriteria.length > 0 ? missingCriteria[0] : null;
+
   return (
-    <Card>
-      <CardHeader className="pb-2">
+    <Card className="border-primary/20 shadow-sm relative overflow-hidden">
+      {/* Decorative gradient background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-50 pointer-events-none" />
+      
+      <CardHeader className="pb-2 relative z-10">
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-sm font-medium">
-            <Shield className="h-4 w-4 text-primary" />Qualificação BANT
+          <CardTitle className="flex items-center gap-2 text-sm font-bold text-primary">
+            <Shield className="h-4 w-4" /> BANT (Mentor de Vendas)
           </CardTitle>
           <div className="flex items-center gap-2">
-            <span className={`text-lg font-bold ${getScoreColor(score)}`}>{score}%</span>
+            <BantBadge score={score} />
             {!editing && (
-              <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => setEditing(true)}>Editar</Button>
+              <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]" onClick={() => setEditing(true)}>Editar</Button>
             )}
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="h-2 rounded-full bg-muted overflow-hidden">
-          <div className={`h-full rounded-full transition-all ${getProgressColor(score)}`} style={{ width: `${score}%` }} />
-        </div>
+      
+      <CardContent className="space-y-4 relative z-10">
+        {/* Alerta de "Negociando às Cegas" se o deal está quente (Late Stage) mas BANT é fria */}
+        {isLateStage && score < 75 && !editing && (
+          <Alert variant="destructive" className="bg-destructive/10 text-destructive border-destructive/20 py-2">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle className="text-xs font-bold mb-0.5">Negociando às cegas!</AlertTitle>
+            <AlertDescription className="text-[10px]">
+              O negócio está na reta final, mas a qualificação está baixa. Você corre o risco de dar desconto para quem não tem urgência ou dinheiro.
+            </AlertDescription>
+          </Alert>
+        )}
 
+        {/* Missão Atual / Próxima Pergunta */}
+        {!editing && nextMission ? (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+            <div className="flex items-start gap-2">
+              <Target className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-bold text-primary mb-1">Próxima Missão de Qualificação</p>
+                <p className="text-[11px] text-muted-foreground leading-tight">
+                  Você ainda não sabe o <strong>{nextMission.label}</strong>. Na próxima ligação, foque em <span className="italic font-medium text-foreground">{nextMission.action}</span>.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : !editing && missingCriteria.length === 0 ? (
+          <div className="rounded-lg border border-success/30 bg-success/5 p-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
+              <p className="text-xs font-bold text-success">Negócio Totalmente Qualificado!</p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Formulário de Qualificação */}
         <div className="space-y-2">
           {bantCriteria.map(({ key, label, description, icon }) => {
             const val = bant[key];
             const notesKey = `${key}_notes` as keyof BANTData;
+            const isTarget = nextMission?.key === key && !editing;
+            
             return (
-              <div key={key} className={`rounded-md border border-border p-2.5 transition-colors ${val === true ? "bg-success/5 border-success/30" : val === false ? "bg-destructive/5 border-destructive/30" : ""}`}>
+              <div 
+                key={key} 
+                className={`rounded-md border p-2.5 transition-all duration-300 ${
+                  isTarget ? 'border-primary shadow-sm bg-background' :
+                  val === true ? "bg-success/5 border-success/30" : 
+                  val === false ? "bg-destructive/5 border-destructive/30" : "border-border bg-muted/20"
+                }`}
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-sm">{icon}</span>
                     <div>
-                      <p className="text-xs font-semibold">{label}</p>
+                      <p className={`text-xs font-semibold ${isTarget ? 'text-primary' : ''}`}>{label}</p>
                       <p className="text-[10px] text-muted-foreground">{description}</p>
                     </div>
                   </div>
                   {editing ? (
-                    <button onClick={() => toggleCriteria(key)} className="rounded-md px-2 py-1 text-xs font-medium transition-colors hover:bg-accent">
+                    <button onClick={() => toggleCriteria(key)} className="rounded-md px-2 py-1 text-xs font-medium transition-colors hover:bg-accent border border-transparent hover:border-border">
                       {val === true ? (
                         <span className="flex items-center gap-1 text-success"><CheckCircle2 className="h-3.5 w-3.5" />Sim</span>
                       ) : val === false ? (
@@ -115,20 +150,27 @@ export function DealQualification({ dealId, qualification, onUpdate }: Props) {
                     </button>
                   ) : (
                     <span>
-                      {val === true ? <CheckCircle2 className="h-4 w-4 text-success" /> : val === false ? <XCircle className="h-4 w-4 text-destructive" /> : <HelpCircle className="h-4 w-4 text-muted-foreground" />}
+                      {val === true ? <CheckCircle2 className="h-4 w-4 text-success" /> : 
+                       val === false ? <XCircle className="h-4 w-4 text-destructive" /> : 
+                       <HelpCircle className="h-4 w-4 text-muted-foreground/30" />}
                     </span>
                   )}
                 </div>
                 {editing && (
-                  <Input
-                    className="mt-1.5 h-7 text-[10px]"
-                    placeholder="Notas..."
-                    value={(bant[notesKey] as string) || ""}
-                    onChange={(e) => setBant({ ...bant, [notesKey]: e.target.value })}
-                  />
+                  <div className="mt-2 pl-6">
+                    <Input
+                      className="h-7 text-[10px] bg-background"
+                      placeholder="Notas ou respostas do prospect..."
+                      value={(bant[notesKey] as string) || ""}
+                      onChange={(e) => setBant({ ...bant, [notesKey]: e.target.value })}
+                    />
+                  </div>
                 )}
                 {!editing && bant[notesKey] && (
-                  <p className="mt-1 text-[10px] text-muted-foreground italic">{bant[notesKey] as string}</p>
+                  <div className="mt-1.5 pl-6 flex items-start gap-1">
+                    <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-muted-foreground italic leading-tight">{bant[notesKey] as string}</p>
+                  </div>
                 )}
               </div>
             );
@@ -136,38 +178,12 @@ export function DealQualification({ dealId, qualification, onUpdate }: Props) {
         </div>
 
         {editing && (
-          <div className="flex gap-2 justify-end">
-            <Button variant="outline" size="sm" onClick={() => setEditing(false)}>Cancelar</Button>
-            <Button size="sm" onClick={save}>Salvar</Button>
+          <div className="flex gap-2 justify-end pt-2 border-t border-border mt-4">
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditing(false)}>Cancelar</Button>
+            <Button size="sm" className="h-7 text-xs" onClick={save}>Salvar BANT</Button>
           </div>
         )}
       </CardContent>
     </Card>
-  );
-}
-
-export function LeadScoreBadge({ score }: { score: number }) {
-  const color = score >= 80 ? "bg-success/10 text-success border-success/30"
-    : score >= 60 ? "bg-warning/10 text-warning border-warning/30"
-    : score >= 30 ? "bg-primary/10 text-primary border-primary/30"
-    : "bg-muted text-muted-foreground";
-
-  return (
-    <div className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${color}`}>
-      <div className="h-1.5 w-1.5 rounded-full bg-current" />
-      {score}
-    </div>
-  );
-}
-
-// Mini-barra de qualificação para cards/listas de deals.
-export function QualificationBar({ score }: { score: number }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className="h-1.5 w-16 rounded-full bg-muted overflow-hidden">
-        <div className={`h-full rounded-full ${getProgressColor(score)}`} style={{ width: `${score}%` }} />
-      </div>
-      <span className={`text-[9px] font-bold ${getScoreColor(score)}`}>{score}%</span>
-    </div>
   );
 }
