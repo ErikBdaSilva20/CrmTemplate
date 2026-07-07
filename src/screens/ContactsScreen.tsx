@@ -21,9 +21,13 @@ import { ContactsCardGrid } from '@/components/crm/contacts/ContactsCardGrid';
 import { useContacts } from '@/hooks/useContacts';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useActivities } from '@/hooks/useActivities';
+import { roleAtLeast, useAuth } from '@/lib/auth';
 import { CONTACT_STATUS, CONTACT_STATUSES } from '@/lib/domain';
 import { updateContact, deleteContact, type Contact, type ContactStatus } from '@/lib/data';
 import { exportToCsv, type CsvColumn } from '@/lib/csv';
+import { isInInterval, resolvePeriod, type Period } from '@/lib/period';
+import { runBatch, reportBatchResult } from '@/lib/batch';
+import { isAllSelected, toggleSetAll, toggleSetOne } from '@/lib/selection';
 
 const PAGE_SIZE = 50;
 
@@ -31,6 +35,12 @@ const PAGE_SIZE = 50;
 // e delega toda a renderização visual para components/crm/contacts/**
 // (Masia Clone-Template Audit Framework §4/§6.1).
 export default function ContactsScreen() {
+  const { role } = useAuth();
+  // Exclusão em lote é destrutiva e irreversível — mesmo gate de config
+  // estrutural (admin/manager). Mudar status em lote continua liberado ao
+  // rep, que já pode editar status contato a contato.
+  const canDelete = roleAtLeast(role, 'manager');
+
   const { data: contactsRaw, refresh: refreshContacts } = useContacts();
   const { data: companies } = useCompanies();
   const { data: activities } = useActivities();
@@ -40,6 +50,9 @@ export default function ContactsScreen() {
   const [sortDir, setSortDir] = useState<ContactsSortDir>('desc');
   const [page, setPage] = useState(0);
   const [filters, setFilters] = useState<ContactFilters>({});
+  // "Tudo" preserva o comportamento atual (zero filtro de data) até o
+  // usuário escolher um Período.
+  const [period, setPeriod] = useState<Period>({ kind: 'preset', preset: 'all' });
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
@@ -99,25 +112,21 @@ export default function ContactsScreen() {
     toast.success(`Movido para ${CONTACT_STATUS[newStatus].label}`);
   };
 
+  const periodInterval = useMemo(() => resolvePeriod(period), [period]);
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return sortedContacts.filter((c) => {
       if (filters.status && filters.status !== 'all' && c.status !== filters.status) return false;
       if (filters.companyId && c.company_id !== filters.companyId) return false;
-      // Compara só a data (YYYY-MM-DD): created_at é timestamp completo, e o
-      // <Input type="date"> manda só a data — comparar as strings inteiras
-      // fazia um contato criado no próprio dia do "até" ser excluído (a
-      // timestamp completa é lexicograficamente "maior" que a data sozinha).
-      const createdDate = c.created_at ? c.created_at.slice(0, 10) : null;
-      if (filters.createdFrom && createdDate && createdDate < filters.createdFrom) return false;
-      if (filters.createdTo && createdDate && createdDate > filters.createdTo) return false;
+      if (!isInInterval(c.created_at, periodInterval)) return false;
       if (term) {
         const haystack = `${c.first_name} ${c.last_name || ''} ${c.email || ''} ${c.phone || ''}`.toLowerCase();
         if (!haystack.includes(term)) return false;
       }
       return true;
     });
-  }, [sortedContacts, filters, search]);
+  }, [sortedContacts, filters, search, periodInterval]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -156,32 +165,32 @@ export default function ContactsScreen() {
 
   // Base em `sorted` (não `paginated`): a tabela agora é virtualizada e
   // mostra a lista inteira filtrada/ordenada, sem paginação client-side.
-  const allSelected = sorted.length > 0 && sorted.every((c) => selectedContacts.has(c.id));
-  const toggleAll = () => {
-    if (allSelected) setSelectedContacts(new Set());
-    else setSelectedContacts(new Set(sorted.map((c) => c.id)));
-  };
-  const toggleOne = (id: string) => {
-    const next = new Set(selectedContacts);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelectedContacts(next);
-  };
+  const sortedIds = useMemo(() => sorted.map((c) => c.id), [sorted]);
+  const allSelected = isAllSelected(selectedContacts, sortedIds);
+  const toggleAll = () => setSelectedContacts((prev) => toggleSetAll(prev, sortedIds));
+  const toggleOne = (id: string) => setSelectedContacts((prev) => toggleSetOne(prev, id));
 
   const batchDelete = async () => {
     const ids = Array.from(selectedContacts);
-    await Promise.all(ids.map((id) => deleteContact(id)));
-    setSelectedContacts(new Set());
+    const result = await runBatch(ids, deleteContact);
+    // Mantém selecionados só os que falharam, pro usuário poder tentar de novo.
+    setSelectedContacts(new Set(result.failed.map((f) => f.id)));
     refreshContacts();
-    toast.success(`${ids.length} contatos excluídos`);
+    reportBatchResult(result, {
+      success: (n) => `${n} contatos excluídos`,
+      failure: (n) => `${n} contatos não puderam ser excluídos`,
+    });
   };
 
   const batchChangeStatus = async (status: ContactStatus) => {
     const ids = Array.from(selectedContacts);
-    await Promise.all(ids.map((id) => updateContact(id, { status })));
-    setSelectedContacts(new Set());
+    const result = await runBatch(ids, (id) => updateContact(id, { status }));
+    setSelectedContacts(new Set(result.failed.map((f) => f.id)));
     refreshContacts();
-    toast.success(`Status atualizado para ${ids.length} contatos`);
+    reportBatchResult(result, {
+      success: (n) => `Status atualizado para ${n} contatos`,
+      failure: (n) => `Não foi possível atualizar o status de ${n} contatos`,
+    });
   };
 
   const exportCSV = () => {
@@ -214,6 +223,8 @@ export default function ContactsScreen() {
         onImportClick={() => setCsvOpen(true)}
         onExportClick={exportCSV}
         onCreateClick={() => setCreateOpen(true)}
+        period={period}
+        onPeriodChange={setPeriod}
       />
 
       {/* Batch Actions */}
@@ -232,10 +243,12 @@ export default function ContactsScreen() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button size="sm" variant="destructive" onClick={batchDelete}>
-            <Trash2 className="mr-1 h-3.5 w-3.5" />
-            Excluir
-          </Button>
+          {canDelete && (
+            <Button size="sm" variant="destructive" onClick={batchDelete}>
+              <Trash2 className="mr-1 h-3.5 w-3.5" />
+              Excluir
+            </Button>
+          )}
         </div>
       )}
 

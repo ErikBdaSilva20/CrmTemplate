@@ -7,14 +7,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ParticlesCanvas } from '@/components/ParticlesCanvas';
+import { PeriodSelect } from '@/components/crm/PeriodSelect';
 import type { Pipeline } from '@/lib/data';
-import type { PeriodFilter } from '@/lib/analytics';
+import type { Period } from '@/lib/period';
 import { RefreshCw } from 'lucide-react';
 
 interface DashboardHeaderProps {
   lastRefresh: Date;
-  period: PeriodFilter;
-  onPeriodChange: (period: PeriodFilter) => void;
+  period: Period;
+  onPeriodChange: (period: Period) => void;
   pipelines: Pipeline[];
   pipelineFilter: string;
   onPipelineFilterChange: (pipelineId: string) => void;
@@ -44,19 +45,7 @@ export function DashboardHeader({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Select value={period} onValueChange={(v) => onPeriodChange(v as PeriodFilter)}>
-            <SelectTrigger className="w-32 h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="today">Hoje</SelectItem>
-              <SelectItem value="this_week">Esta semana</SelectItem>
-              <SelectItem value="this_month">Este mês</SelectItem>
-              <SelectItem value="this_quarter">Trimestre</SelectItem>
-              <SelectItem value="this_year">Este ano</SelectItem>
-              <SelectItem value="all">Tudo</SelectItem>
-            </SelectContent>
-          </Select>
+          <PeriodSelect value={period} onChange={onPeriodChange} />
           {pipelines.length > 1 && (
             <Select value={pipelineFilter} onValueChange={onPipelineFilterChange}>
               <SelectTrigger className="w-36 h-8 text-xs">

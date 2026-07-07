@@ -2,18 +2,13 @@ import { useEffect, useState, useMemo } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import { Edit2, X, Save, Globe, Users, DollarSign } from "lucide-react";
 import { CompanyLogo } from "@/components/crm/CompanyLogo";
+import { CompanyForm, type CompanyFormValue } from "@/components/crm/CompanyForm";
 import { toast } from "sonner";
-import { INDUSTRIES, COMPANY_SIZES } from "@/lib/constants";
 import { DEAL_STATUS } from "@/lib/domain";
 import { useContacts } from "@/hooks/useContacts";
 import { useDeals } from "@/hooks/useDeals";
@@ -27,13 +22,27 @@ interface CompanyDrawerProps {
   onUpdate: () => void;
 }
 
+function toFormValue(company: Company): CompanyFormValue {
+  return {
+    name: company.name,
+    domain: company.domain || "",
+    industry: company.industry || "",
+    size: company.size || "",
+    revenue: company.revenue != null ? String(company.revenue) : "",
+    website: company.website || "",
+    linkedin_url: company.linkedin_url || "",
+  };
+}
+
 export function CompanyDrawer({ company, onClose, onUpdate }: CompanyDrawerProps) {
   const { data: allContacts } = useContacts();
   const { data: allDeals } = useDeals();
   const { data: stages } = useStages();
 
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<Partial<Company>>({});
+  const [form, setForm] = useState<CompanyFormValue>(() => company ? toFormValue(company) : {
+    name: "", domain: "", industry: "", size: "", revenue: "", website: "", linkedin_url: "",
+  });
 
   // Sem join: filtra os relacionados já cacheados no front (§B5).
   const contacts = useMemo(
@@ -46,16 +55,16 @@ export function CompanyDrawer({ company, onClose, onUpdate }: CompanyDrawerProps
   );
 
   useEffect(() => {
-    if (company) { setForm(company); setEditing(false); }
+    if (company) { setForm(toFormValue(company)); setEditing(false); }
   }, [company]);
 
   const handleSave = async () => {
     if (!company) return;
     try {
       await updateCompany(company.id, {
-        name: form.name, domain: form.domain, industry: form.industry,
-        size: form.size, revenue: form.revenue ? Number(form.revenue) : null,
-        website: form.website, linkedin_url: form.linkedin_url,
+        name: form.name, domain: form.domain || null, industry: form.industry || null,
+        size: form.size || null, revenue: form.revenue ? Number(form.revenue) : null,
+        website: form.website || null, linkedin_url: form.linkedin_url || null,
       });
       setEditing(false); onUpdate();
       toast.success("Empresa atualizada");
@@ -115,35 +124,7 @@ export function CompanyDrawer({ company, onClose, onUpdate }: CompanyDrawerProps
           <TabsContent value="overview" className="mt-4 space-y-4">
             {editing ? (
               <div className="space-y-3">
-                <div className="space-y-1"><Label className="text-xs">Nome</Label>
-                  <Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-                <div className="space-y-1"><Label className="text-xs">Domínio</Label>
-                  <Input value={form.domain || ""} onChange={(e) => setForm({ ...form, domain: e.target.value })} /></div>
-                <div className="space-y-1"><Label className="text-xs">Indústria</Label>
-                  <Select value={form.industry || ""} onValueChange={(v) => setForm({ ...form, industry: v })}>
-                    <SelectTrigger><SelectValue placeholder="Selecionar indústria" /></SelectTrigger>
-                    <SelectContent>
-                      {INDUSTRIES.map((ind) => (
-                        <SelectItem key={ind} value={ind}>{ind}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Tamanho</Label>
-                  <Select value={form.size || ""} onValueChange={(v) => setForm({ ...form, size: v })}>
-                    <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                    <SelectContent>
-                      {COMPANY_SIZES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1"><Label className="text-xs">Receita anual</Label>
-                  <Input type="number" value={form.revenue ?? ""} onChange={(e) => setForm({ ...form, revenue: e.target.value ? Number(e.target.value) : null })} /></div>
-                <div className="space-y-1"><Label className="text-xs">Website</Label>
-                  <Input value={form.website || ""} onChange={(e) => setForm({ ...form, website: e.target.value })} /></div>
-                <div className="space-y-1"><Label className="text-xs">LinkedIn</Label>
-                  <Input value={form.linkedin_url || ""} onChange={(e) => setForm({ ...form, linkedin_url: e.target.value })} /></div>
+                <CompanyForm value={form} onChange={(patch) => setForm({ ...form, ...patch })} />
                 <Button onClick={handleSave} className="w-full"><Save className="mr-2 h-4 w-4" />Salvar</Button>
               </div>
             ) : (

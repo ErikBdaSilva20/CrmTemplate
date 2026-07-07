@@ -2,19 +2,23 @@ import { Button } from "@/components/ui/button";
 import { CalendarDays, List, Plus } from "lucide-react";
 import { ACTIVITY_TYPE, ACTIVITY_TYPES } from "@/lib/domain";
 import { SegmentedToggle } from "@/components/ui/segmented-toggle";
+import { BucketTabs } from "@/components/crm/BucketTabs";
+import { PeriodSelect } from "@/components/crm/PeriodSelect";
+import type { OperationalBucket } from "@/lib/activityBuckets";
+import type { Period } from "@/lib/period";
 
 export type ViewMode = "list" | "calendar";
-export type DateFilter = "todo" | "overdue" | "today" | "tomorrow" | "this_week" | "next_week" | "next_30_days";
+export type DateFilter = Exclude<OperationalBucket, "done">;
 
-export const dateFilterLabels: Record<DateFilter, string> = {
-  todo: "Para fazer",
-  overdue: "Vencido",
-  today: "Hoje",
-  tomorrow: "Amanhã",
-  this_week: "Esta semana",
-  next_week: "Próxima semana",
-  next_30_days: "Próximos 30 dias",
-};
+const BUCKETS: { key: DateFilter; label: string }[] = [
+  { key: "todo", label: "Para fazer" },
+  { key: "overdue", label: "Vencido" },
+  { key: "today", label: "Hoje" },
+  { key: "tomorrow", label: "Amanhã" },
+  { key: "this_week", label: "Esta semana" },
+  { key: "next_week", label: "Próxima semana" },
+  { key: "next_30_days", label: "Próximos 30 dias" },
+];
 
 interface ActivitiesToolbarProps {
   totalCount: number;
@@ -27,6 +31,11 @@ interface ActivitiesToolbarProps {
   dateFilter: DateFilter;
   onDateFilterChange: (filter: DateFilter) => void;
   dateCounts: Record<DateFilter, number>;
+  // Período analítico (FR-16) — distinto do Bucket acima: Bucket filtra por
+  // due_date (operacional, "o que fazer agora"), Período filtra por
+  // created_at (analítico, "como foi o intervalo X"). Ver ActivitiesScreen.tsx.
+  period: Period;
+  onPeriodChange: (period: Period) => void;
 }
 
 // Cabeçalho + as duas linhas de filtro (tipo, vencimento) da tela de
@@ -44,6 +53,8 @@ export function ActivitiesToolbar({
   dateFilter,
   onDateFilterChange,
   dateCounts,
+  period,
+  onPeriodChange,
 }: ActivitiesToolbarProps) {
   return (
     <>
@@ -94,28 +105,12 @@ export function ActivitiesToolbar({
         })}
       </div>
 
-      <div className="flex items-center gap-0.5 py-2 text-xs flex-wrap">
-        {(Object.keys(dateFilterLabels) as DateFilter[]).map((key) => {
-          const count = dateCounts[key];
-          const isActive = dateFilter === key;
-          const isOverdueTab = key === "overdue";
-          return (
-            <button
-              key={key}
-              onClick={() => onDateFilterChange(key)}
-              className={`px-3 py-1 rounded-md font-medium transition-colors ${
-                isActive
-                  ? isOverdueTab && count > 0
-                    ? "bg-destructive/10 text-destructive"
-                    : "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-            >
-              {dateFilterLabels[key]}
-              {count > 0 && <span className={`ml-1 text-[10px] ${isOverdueTab ? "text-destructive" : ""}`}>({count})</span>}
-            </button>
-          );
-        })}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <BucketTabs buckets={BUCKETS} counts={dateCounts} value={dateFilter} onChange={onDateFilterChange} destructiveKey="overdue" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-medium text-muted-foreground">Período</span>
+          <PeriodSelect value={period} onChange={onPeriodChange} />
+        </div>
       </div>
     </>
   );

@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ArrowUpDown, Trophy, XCircle, Trash2, AlertTriangle } from "lucide-react";
+import { Trophy, XCircle, Trash2, AlertTriangle } from "lucide-react";
 import type { DealWithRelations, PipelineStage } from "@/lib/data";
 import { DEAL_STATUS } from "@/lib/domain";
 import { formatCurrency, formatMonthYear, monthsUntil } from "@/lib/format";
 import { BantBadge } from "@/components/crm/BantBadge";
+import { SortHeader } from "@/components/crm/SortHeader";
 import { useVirtualTable } from "@/hooks/useVirtualTable";
+import { isAllSelected, toggleSetAll, toggleSetOne } from "@/lib/selection";
 
 const COLUMN_COUNT = 8;
 
@@ -39,7 +41,7 @@ export function DealsList({
     else { setSortKey(key); setSortDir("asc"); }
   };
 
-  const sorted = [...deals].sort((a, b) => {
+  const sorted = useMemo(() => [...deals].sort((a, b) => {
     let cmp = 0;
     switch (sortKey) {
       case "title": cmp = (a.title || "").localeCompare(b.title || ""); break;
@@ -51,19 +53,12 @@ export function DealsList({
       case "qualification_score": cmp = (a.qualification_score ?? 0) - (b.qualification_score ?? 0); break;
     }
     return sortDir === "asc" ? cmp : -cmp;
-  });
+  }), [deals, sortKey, sortDir]);
 
-  const allSelected = sorted.length > 0 && sorted.every((d) => selectedDeals.has(d.id));
-  const toggleAll = () => {
-    if (allSelected) onSelectionChange(new Set());
-    else onSelectionChange(new Set(sorted.map((d) => d.id)));
-  };
-  const toggleOne = (id: string) => {
-    const next = new Set(selectedDeals);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    onSelectionChange(next);
-  };
+  const sortedIds = useMemo(() => sorted.map((d) => d.id), [sorted]);
+  const allSelected = isAllSelected(selectedDeals, sortedIds);
+  const toggleAll = () => onSelectionChange(toggleSetAll(selectedDeals, sortedIds));
+  const toggleOne = (id: string) => onSelectionChange(toggleSetOne(selectedDeals, id));
 
   const getStageName = (stageId: string | null) => {
     if (!stageId) return "—";
@@ -71,13 +66,6 @@ export function DealsList({
   };
 
   const { scrollRef, rows, paddingTop, paddingBottom } = useVirtualTable({ count: sorted.length });
-
-  const SortHeader = ({ label, field }: { label: string; field: SortKey }) => (
-    <button onClick={() => toggleSort(field)} className="flex items-center gap-1 hover:text-foreground transition-colors">
-      {label}
-      <ArrowUpDown className="h-3 w-3" />
-    </button>
-  );
 
   return (
     <div className="space-y-3">
@@ -103,13 +91,13 @@ export function DealsList({
               <TableHead className="w-10">
                 <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Selecionar todos" />
               </TableHead>
-              <TableHead><SortHeader label="Título" field="title" /></TableHead>
-              <TableHead><SortHeader label="Valor" field="value" /></TableHead>
+              <TableHead><SortHeader label="Título" field="title" onSort={toggleSort} /></TableHead>
+              <TableHead><SortHeader label="Valor" field="value" onSort={toggleSort} /></TableHead>
               <TableHead className="hidden md:table-cell">Estágio</TableHead>
-              <TableHead className="hidden lg:table-cell"><SortHeader label="Probabilidade" field="probability" /></TableHead>
-              <TableHead className="hidden xl:table-cell"><SortHeader label="BANT" field="qualification_score" /></TableHead>
-              <TableHead className="hidden sm:table-cell"><SortHeader label="Fechamento" field="close_date" /></TableHead>
-              <TableHead><SortHeader label="Status" field="status" /></TableHead>
+              <TableHead className="hidden lg:table-cell"><SortHeader label="Probabilidade" field="probability" onSort={toggleSort} /></TableHead>
+              <TableHead className="hidden xl:table-cell"><SortHeader label="BANT" field="qualification_score" onSort={toggleSort} /></TableHead>
+              <TableHead className="hidden sm:table-cell"><SortHeader label="Fechamento" field="close_date" onSort={toggleSort} /></TableHead>
+              <TableHead><SortHeader label="Status" field="status" onSort={toggleSort} /></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

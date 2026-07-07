@@ -15,9 +15,12 @@ export interface DateRange {
   end: Date;
 }
 
-// Monday-to-Sunday week containing `today + offsetWeeks * 7 days`.
-export function getWeekRange(offsetWeeks = 0): DateRange {
-  const now = new Date();
+// Monday-to-Sunday week containing `now + offsetWeeks * 7 days`. `now`
+// is an optional parameter (defaults to the real current time) so callers
+// that need deterministic ranges — ex: activityBuckets.ts computing several
+// ranges relative to the same instant — can pass a fixed reference instead
+// of each range silently using its own `new Date()`.
+export function getWeekRange(offsetWeeks = 0, now = new Date()): DateRange {
   const day = now.getDay();
   const monday = new Date(now);
   monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1) + offsetWeeks * 7);

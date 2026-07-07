@@ -19,6 +19,8 @@ import {
   useStages,
 } from '@/hooks/usePipelines';
 import { roleAtLeast, useAuth } from '@/lib/auth';
+import { isInInterval, resolvePeriod, type Period } from '@/lib/period';
+import { runBatch, reportBatchResult } from '@/lib/batch';
 import {
   createDeal,
   createDefaultPipeline,
@@ -81,6 +83,10 @@ export default function DealsScreen() {
   const [form, setForm] = useState<Partial<Deal>>({});
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<DealFilters>({});
+  // "Tudo" preserva o comportamento atual (zero filtro de data) até o
+  // usuário escolher um Período.
+  const [period, setPeriod] = useState<Period>({ kind: 'preset', preset: 'all' });
+  const periodInterval = useMemo(() => resolvePeriod(period), [period]);
 
   const [lossModalOpen, setLossModalOpen] = useState(false);
   const [lossDealId, setLossDealId] = useState<string | null>(null);
@@ -132,18 +138,19 @@ export default function DealsScreen() {
     [stages, selectedPipeline]
   );
 
-  const filteredDeals = deals.filter((d) => {
-    if (filters.onlyHot && (d.qualification_score ?? 0) < 75) return false;
-    if (filters.minValue && d.value < filters.minValue) return false;
-    if (filters.maxValue && d.value > filters.maxValue) return false;
-    if (filters.closeDateFrom && d.close_date && d.close_date < filters.closeDateFrom) return false;
-    if (filters.closeDateTo && d.close_date && d.close_date > filters.closeDateTo) return false;
-    if (viewMode === "kanban") {
-      const stageIds = pipelineStages.map((s) => s.id);
-      if (d.stage_id && !stageIds.includes(d.stage_id) && d.status === "open") return false;
-    }
-    return true;
-  });
+  const filteredDeals = useMemo(() => {
+    const stageIds = new Set(pipelineStages.map((s) => s.id));
+    return deals.filter((d) => {
+      if (filters.onlyHot && (d.qualification_score ?? 0) < 75) return false;
+      if (filters.minValue && d.value < filters.minValue) return false;
+      if (filters.maxValue && d.value > filters.maxValue) return false;
+      if (!isInInterval(d.close_date, periodInterval)) return false;
+      if (viewMode === "kanban") {
+        if (d.stage_id && !stageIds.has(d.stage_id) && d.status === "open") return false;
+      }
+      return true;
+    });
+  }, [deals, filters, periodInterval, viewMode, pipelineStages]);
 
   const handleDragEnd = async (dealId: string, newStageId: string) => {
     setDeals((prev) => prev.map((d) => (d.id === dealId ? { ...d, stage_id: newStageId } : d)));
@@ -248,18 +255,17 @@ export default function DealsScreen() {
 
   const handleBatchAction = async (action: 'won' | 'lost' | 'delete') => {
     const ids = Array.from(selectedDeals);
-    if (action === 'delete') {
-      await Promise.all(ids.map((id) => deleteDeal(id)));
-      toast.success(`${ids.length} negócios excluídos`);
-    } else if (action === 'won') {
-      await Promise.all(ids.map((id) => markDealWon(id)));
-      toast.success(`${ids.length} negócios marcados como ganhos`);
-    } else {
-      await Promise.all(ids.map((id) => markDealLost(id, '')));
-      toast.success(`${ids.length} negócios marcados como perdidos`);
-    }
-    setSelectedDeals(new Set());
+    const actionFn = action === 'delete' ? deleteDeal : action === 'won' ? markDealWon : (id: string) => markDealLost(id, '');
+    const labels = {
+      delete: { success: (n: number) => `${n} negócios excluídos`, failure: (n: number) => `${n} negócios não puderam ser excluídos` },
+      won: { success: (n: number) => `${n} negócios marcados como ganhos`, failure: (n: number) => `${n} negócios não puderam ser marcados como ganhos` },
+      lost: { success: (n: number) => `${n} negócios marcados como perdidos`, failure: (n: number) => `${n} negócios não puderam ser marcados como perdidos` },
+    }[action];
+
+    const result = await runBatch(ids, actionFn);
+    setSelectedDeals(new Set(result.failed.map((f) => f.id)));
     refreshDeals();
+    reportBatchResult(result, labels);
   };
 
   const openDeals = filteredDeals.filter((d) => d.status === 'open');
@@ -298,7 +304,9 @@ export default function DealsScreen() {
         </Button>
       )}
 
-      {showFilters && <DealsFilters filters={filters} onFiltersChange={setFilters} />}
+      {showFilters && (
+        <DealsFilters filters={filters} onFiltersChange={setFilters} period={period} onPeriodChange={setPeriod} />
+      )}
 
       {pipelines.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-20 text-center">

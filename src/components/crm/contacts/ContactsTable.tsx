@@ -4,11 +4,12 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertTriangle, ArrowUpDown } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { CONTACT_STATUS } from "@/lib/domain";
 import { formatDate, daysAgo } from "@/lib/format";
 import type { Company, Contact } from "@/lib/data";
 import { useVirtualTable } from "@/hooks/useVirtualTable";
+import { SortHeader } from "@/components/crm/SortHeader";
 
 const COLUMN_COUNT = 8;
 
@@ -25,15 +26,6 @@ interface ContactsTableProps {
   onToggleAll: () => void;
   onToggleOne: (id: string) => void;
   onRowClick: (id: string) => void;
-}
-
-function SortHeader({ label, field, onSort }: { label: string; field: ContactsSortKey; onSort: (key: ContactsSortKey) => void }) {
-  return (
-    <button onClick={() => onSort(field)} className="flex items-center gap-1 hover:text-foreground transition-colors">
-      {label}
-      <ArrowUpDown className="h-3 w-3" />
-    </button>
-  );
 }
 
 // Visão em tabela de /contacts — seleção em lote, ordenação por coluna e o

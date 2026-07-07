@@ -6,14 +6,14 @@ import { Columns3, Download, Filter, LayoutGrid, List, Plus, Search, Upload, X }
 import { CONTACT_STATUS, CONTACT_STATUSES } from "@/lib/domain";
 import type { Company } from "@/lib/data";
 import { SegmentedToggle } from "@/components/ui/segmented-toggle";
+import { PeriodSelect } from "@/components/crm/PeriodSelect";
+import type { Period } from "@/lib/period";
 
 export type ContactsViewMode = "table" | "cards" | "status";
 
 export interface ContactFilters {
   status?: string;
   companyId?: string;
-  createdFrom?: string;
-  createdTo?: string;
 }
 
 interface ContactsToolbarProps {
@@ -30,7 +30,11 @@ interface ContactsToolbarProps {
   onImportClick: () => void;
   onExportClick: () => void;
   onCreateClick: () => void;
+  period: Period;
+  onPeriodChange: (period: Period) => void;
 }
+
+const DEFAULT_PERIOD: Period = { kind: "preset", preset: "all" };
 
 // Cabeçalho de /contacts (busca, alternância de visualização, ações) + o
 // painel de filtros expansível — vivem juntos porque o painel só existe em
@@ -49,6 +53,8 @@ export function ContactsToolbar({
   onImportClick,
   onExportClick,
   onCreateClick,
+  period,
+  onPeriodChange,
 }: ContactsToolbarProps) {
   return (
     <>
@@ -138,25 +144,19 @@ export function ContactsToolbar({
             </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Criado de</Label>
-            <Input
-              type="date"
-              className="w-36 h-8 text-xs"
-              value={filters.createdFrom ?? ""}
-              onChange={(e) => onFiltersChange({ ...filters, createdFrom: e.target.value || undefined })}
-            />
+            <Label className="text-xs">Criado em</Label>
+            <PeriodSelect value={period} onChange={onPeriodChange} />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">até</Label>
-            <Input
-              type="date"
-              className="w-36 h-8 text-xs"
-              value={filters.createdTo ?? ""}
-              onChange={(e) => onFiltersChange({ ...filters, createdTo: e.target.value || undefined })}
-            />
-          </div>
-          {Object.values(filters).some(Boolean) && (
-            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => onFiltersChange({})}>
+          {(Object.values(filters).some(Boolean) || period.kind !== "preset" || period.preset !== "all") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => {
+                onFiltersChange({});
+                onPeriodChange(DEFAULT_PERIOD);
+              }}
+            >
               <X className="mr-1 h-3 w-3" />
               Limpar
             </Button>

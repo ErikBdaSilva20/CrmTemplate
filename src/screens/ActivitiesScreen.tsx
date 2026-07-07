@@ -9,7 +9,8 @@ import { useActivities } from "@/hooks/useActivities";
 import { useContacts } from "@/hooks/useContacts";
 import { useCompanies } from "@/hooks/useCompanies";
 import { useDeals } from "@/hooks/useDeals";
-import { startOfDay, endOfDay, getWeekRange } from "@/lib/date";
+import { filterByBucket, countByBucket } from "@/lib/activityBuckets";
+import { isInInterval, resolvePeriod, type Period } from "@/lib/period";
 import { updateActivity, deleteActivity, type Activity } from "@/lib/data";
 
 // Orquestrador de layout: busca os dados, calcula os filtros/contagens e
@@ -23,6 +24,9 @@ export default function ActivitiesScreen() {
 
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<DateFilter>("todo");
+  // Período analítico (FR-16) — "Tudo" preserva o comportamento atual (zero
+  // recorte por Período) até o usuário escolher um.
+  const [period, setPeriod] = useState<Period>({ kind: "preset", preset: "all" });
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [createOpen, setCreateOpen] = useState(false);
   const [editActivity, setEditActivity] = useState<Activity | null>(null);
@@ -58,63 +62,22 @@ export default function ActivitiesScreen() {
     toast.success("Atividade excluída");
   };
 
-  // Deps corretas: o filtro só depende de activities/typeFilter/dateFilter —
-  // contacts/deals nunca eram lidos aqui (AUDITORIA-CODIGO.md §5.2).
+  const periodInterval = useMemo(() => resolvePeriod(period), [period]);
+
+  // Bucket (src/lib/activityBuckets.ts) filtra por due_date — operacional,
+  // "o que fazer agora". Período (src/lib/period.ts) filtra por created_at —
+  // analítico, "como foi o intervalo X" (FR-16, Glossário do PRD §3). Os
+  // dois participam aqui, lado a lado, como condições independentes.
   const filtered = useMemo(() => {
-    const now = new Date();
-    const todayStart = startOfDay(now);
-    const todayEnd = endOfDay(now);
-    const tomorrowStart = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
-    const tomorrowEnd = endOfDay(tomorrowStart);
-    const thisWeek = getWeekRange(0);
-    const nextWeek = getWeekRange(1);
-    const next30End = endOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30));
+    const byType = typeFilter === "all" ? sortedActivities : sortedActivities.filter((a) => a.type === typeFilter);
+    const byBucket = filterByBucket(byType, dateFilter);
+    return byBucket.filter((a) => isInInterval(a.created_at, periodInterval));
+  }, [sortedActivities, typeFilter, dateFilter, periodInterval]);
 
-    return sortedActivities.filter((a) => {
-      if (typeFilter !== "all" && a.type !== typeFilter) return false;
-
-      const dueDate = a.due_date ? new Date(a.due_date) : null;
-      switch (dateFilter) {
-        case "todo":
-          return !a.completed_at;
-        case "overdue":
-          return !a.completed_at && dueDate !== null && dueDate < now;
-        case "today":
-          return !a.completed_at && dueDate !== null && dueDate >= todayStart && dueDate <= todayEnd;
-        case "tomorrow":
-          return !a.completed_at && dueDate !== null && dueDate >= tomorrowStart && dueDate <= tomorrowEnd;
-        case "this_week":
-          return !a.completed_at && dueDate !== null && dueDate >= thisWeek.start && dueDate <= thisWeek.end;
-        case "next_week":
-          return !a.completed_at && dueDate !== null && dueDate >= nextWeek.start && dueDate <= nextWeek.end;
-        case "next_30_days":
-          return !a.completed_at && dueDate !== null && dueDate >= todayStart && dueDate <= next30End;
-      }
-      return true;
-    });
-  }, [sortedActivities, typeFilter, dateFilter]);
-
-  const counts = useMemo(() => {
-    const now = new Date();
-    const todayStart = startOfDay(now);
-    const todayEnd = endOfDay(now);
-    const tomorrowStart = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
-    const tomorrowEnd = endOfDay(tomorrowStart);
-    const thisWeek = getWeekRange(0);
-    const nextWeek = getWeekRange(1);
-    const next30End = endOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30));
-
-    const pending = sortedActivities.filter((a) => !a.completed_at);
-    return {
-      todo: pending.length,
-      overdue: pending.filter((a) => a.due_date && new Date(a.due_date) < now).length,
-      today: pending.filter((a) => a.due_date && new Date(a.due_date) >= todayStart && new Date(a.due_date) <= todayEnd).length,
-      tomorrow: pending.filter((a) => a.due_date && new Date(a.due_date) >= tomorrowStart && new Date(a.due_date) <= tomorrowEnd).length,
-      this_week: pending.filter((a) => a.due_date && new Date(a.due_date) >= thisWeek.start && new Date(a.due_date) <= thisWeek.end).length,
-      next_week: pending.filter((a) => a.due_date && new Date(a.due_date) >= nextWeek.start && new Date(a.due_date) <= nextWeek.end).length,
-      next_30_days: pending.filter((a) => a.due_date && new Date(a.due_date) >= todayStart && new Date(a.due_date) <= next30End).length,
-    };
-  }, [sortedActivities]);
+  const counts = useMemo(
+    () => countByBucket(sortedActivities, ["todo", "overdue", "today", "tomorrow", "this_week", "next_week", "next_30_days"]),
+    [sortedActivities],
+  ) as Record<DateFilter, number>;
 
   return (
     <div className="space-y-0">
@@ -129,6 +92,8 @@ export default function ActivitiesScreen() {
         dateFilter={dateFilter}
         onDateFilterChange={setDateFilter}
         dateCounts={counts}
+        period={period}
+        onPeriodChange={setPeriod}
       />
 
       {viewMode === "list" && (

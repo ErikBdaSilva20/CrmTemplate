@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -80,12 +80,12 @@ function ContactCard({
 function StatusColumn({
   status,
   contacts,
-  companies,
+  companiesMap,
   onContactClick,
 }: {
   status: ContactStatus;
   contacts: Contact[];
-  companies: Company[];
+  companiesMap: Map<string, Company>;
   onContactClick: (c: Contact) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
@@ -112,7 +112,7 @@ function StatusColumn({
           <ContactCard
             key={contact.id}
             contact={contact}
-            company={companies.find((c) => c.id === contact.company_id)}
+            company={contact.company_id ? companiesMap.get(contact.company_id) : undefined}
             onClick={() => onContactClick(contact)}
           />
         ))}
@@ -138,6 +138,8 @@ export function ContactsKanbanByStatus({
   onStatusChange,
 }: ContactsKanbanByStatusProps) {
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
+
+  const companiesMap = useMemo(() => new Map(companies.map((c) => [c.id, c])), [companies]);
 
   const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 8 } });
   const touchSensor = useSensor(TouchSensor, {
@@ -174,7 +176,7 @@ export function ContactsKanbanByStatus({
             key={status}
             status={status}
             contacts={contacts.filter((c) => (c.status || 'lead') === status)}
-            companies={companies}
+            companiesMap={companiesMap}
             onContactClick={onContactClick}
           />
         ))}

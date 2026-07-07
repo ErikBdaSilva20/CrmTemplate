@@ -11,7 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, LayoutGrid, List, Filter, ArrowUpDown, Upload, Download,
+  Plus, LayoutGrid, List, Filter, Upload, Download,
   Trash2, ChevronLeft, ChevronRight, X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -19,11 +19,17 @@ import { CompanyDrawer } from "@/components/crm/CompanyDrawer";
 import { CompanyCreateModal } from "@/components/crm/CompanyCreateModal";
 import { CompanyLogo } from "@/components/crm/CompanyLogo";
 import { CSVImportModal } from "@/components/crm/CSVImportModal";
+import { PeriodSelect } from "@/components/crm/PeriodSelect";
+import { SortHeader } from "@/components/crm/SortHeader";
 import { COMPANY_SIZES } from "@/lib/constants";
 import { useCompanies } from "@/hooks/useCompanies";
+import { roleAtLeast, useAuth } from "@/lib/auth";
 import { deleteCompany, type Company } from "@/lib/data";
 import { formatCurrencyCompact, formatDate } from "@/lib/format";
 import { exportToCsv, type CsvColumn } from "@/lib/csv";
+import { isInInterval, resolvePeriod, type Period } from "@/lib/period";
+import { runBatch, reportBatchResult } from "@/lib/batch";
+import { isAllSelected, toggleSetAll, toggleSetOne } from "@/lib/selection";
 
 const EXPORT_COLUMNS: CsvColumn<Company>[] = [
   { label: "Nome", accessor: (c) => c.name },
@@ -44,13 +50,24 @@ interface CompanyFilters {
   size?: string;
 }
 
+// "Tudo" preserva o comportamento atual (zero filtro de data) até o
+// usuário escolher um Período — Companies nunca teve filtro de data antes
+// desta feature (FR-13), então não há regressão a evitar.
+const DEFAULT_PERIOD: Period = { kind: "preset", preset: "all" };
+
 export default function CompaniesScreen() {
+  const { role } = useAuth();
+  // Exclusão em lote é destrutiva e irreversível — mesmo gate de config
+  // estrutural (admin/manager), espelhando ContactsScreen.
+  const canDelete = roleAtLeast(role, "manager");
+
   const { data: companiesRaw, refresh: refreshCompanies } = useCompanies();
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(0);
   const [filters, setFilters] = useState<CompanyFilters>({});
+  const [period, setPeriod] = useState<Period>(DEFAULT_PERIOD);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCompanies, setSelectedCompanies] = useState<Set<string>>(new Set());
 
@@ -84,13 +101,18 @@ export default function CompaniesScreen() {
     return [...new Set(companies.map((c) => c.industry).filter(Boolean))] as string[];
   }, [companies]);
 
+  // Resolve o Período uma vez por mudança de seleção — camada compartilhada
+  // (src/lib/period.ts), não uma sexta implementação de filtro de data.
+  const periodInterval = useMemo(() => resolvePeriod(period), [period]);
+
   const filtered = useMemo(() => {
     return companies.filter((c) => {
       if (filters.industry && c.industry !== filters.industry) return false;
       if (filters.size && c.size !== filters.size) return false;
+      if (!isInInterval(c.created_at, periodInterval)) return false;
       return true;
     });
-  }, [companies, filters]);
+  }, [companies, filters, periodInterval]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -115,23 +137,20 @@ export default function CompaniesScreen() {
     else { setSortKey(key); setSortDir("asc"); }
   };
 
-  const allSelected = paginated.length > 0 && paginated.every((c) => selectedCompanies.has(c.id));
-  const toggleAll = () => {
-    if (allSelected) setSelectedCompanies(new Set());
-    else setSelectedCompanies(new Set(paginated.map((c) => c.id)));
-  };
-  const toggleOne = (id: string) => {
-    const next = new Set(selectedCompanies);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    setSelectedCompanies(next);
-  };
+  const paginatedIds = useMemo(() => paginated.map((c) => c.id), [paginated]);
+  const allSelected = isAllSelected(selectedCompanies, paginatedIds);
+  const toggleAll = () => setSelectedCompanies((prev) => toggleSetAll(prev, paginatedIds));
+  const toggleOne = (id: string) => setSelectedCompanies((prev) => toggleSetOne(prev, id));
 
   const batchDelete = async () => {
     const ids = Array.from(selectedCompanies);
-    await Promise.all(ids.map((id) => deleteCompany(id)));
-    setSelectedCompanies(new Set());
+    const result = await runBatch(ids, deleteCompany);
+    setSelectedCompanies(new Set(result.failed.map((f) => f.id)));
     refreshCompanies();
-    toast.success(`${ids.length} empresas excluídas`);
+    reportBatchResult(result, {
+      success: (n) => `${n} empresas excluídas`,
+      failure: (n) => `${n} empresas não puderam ser excluídas`,
+    });
   };
 
   const exportCSV = () => {
@@ -140,12 +159,6 @@ export default function CompaniesScreen() {
   };
 
   const formatRevenue = (v: number | null) => v ? formatCurrencyCompact(v) : "—";
-
-  const SortHeader = ({ label, field }: { label: string; field: SortKey }) => (
-    <button onClick={() => toggleSort(field)} className="flex items-center gap-1 hover:text-foreground transition-colors">
-      {label}<ArrowUpDown className="h-3 w-3" />
-    </button>
-  );
 
   return (
     <div className="space-y-4">
@@ -200,8 +213,20 @@ export default function CompaniesScreen() {
               </SelectContent>
             </Select>
           </div>
-          {Object.values(filters).some(Boolean) && (
-            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setFilters({})}>
+          <div className="space-y-1">
+            <Label className="text-xs">Criado em</Label>
+            <PeriodSelect value={period} onChange={setPeriod} />
+          </div>
+          {(Object.values(filters).some(Boolean) || period.kind !== "preset" || period.preset !== "all") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => {
+                setFilters({});
+                setPeriod(DEFAULT_PERIOD);
+              }}
+            >
               <X className="mr-1 h-3 w-3" />Limpar
             </Button>
           )}
@@ -211,9 +236,11 @@ export default function CompaniesScreen() {
       {selectedCompanies.size > 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 p-2">
           <span className="text-sm font-medium">{selectedCompanies.size} selecionadas</span>
-          <Button size="sm" variant="destructive" onClick={batchDelete}>
-            <Trash2 className="mr-1 h-3.5 w-3.5" />Excluir
-          </Button>
+          {canDelete && (
+            <Button size="sm" variant="destructive" onClick={batchDelete}>
+              <Trash2 className="mr-1 h-3.5 w-3.5" />Excluir
+            </Button>
+          )}
         </div>
       )}
 
@@ -223,12 +250,12 @@ export default function CompaniesScreen() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10"><Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Selecionar todas" /></TableHead>
-                <TableHead><SortHeader label="Empresa" field="name" /></TableHead>
-                <TableHead className="hidden sm:table-cell"><SortHeader label="Domínio" field="domain" /></TableHead>
-                <TableHead className="hidden md:table-cell"><SortHeader label="Indústria" field="industry" /></TableHead>
-                <TableHead className="hidden lg:table-cell"><SortHeader label="Tamanho" field="size" /></TableHead>
-                <TableHead className="hidden lg:table-cell"><SortHeader label="Receita" field="revenue" /></TableHead>
-                <TableHead className="hidden md:table-cell"><SortHeader label="Criado em" field="created_at" /></TableHead>
+                <TableHead><SortHeader label="Empresa" field="name" onSort={toggleSort} /></TableHead>
+                <TableHead className="hidden sm:table-cell"><SortHeader label="Domínio" field="domain" onSort={toggleSort} /></TableHead>
+                <TableHead className="hidden md:table-cell"><SortHeader label="Indústria" field="industry" onSort={toggleSort} /></TableHead>
+                <TableHead className="hidden lg:table-cell"><SortHeader label="Tamanho" field="size" onSort={toggleSort} /></TableHead>
+                <TableHead className="hidden lg:table-cell"><SortHeader label="Receita" field="revenue" onSort={toggleSort} /></TableHead>
+                <TableHead className="hidden md:table-cell"><SortHeader label="Criado em" field="created_at" onSort={toggleSort} /></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

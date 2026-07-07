@@ -1,18 +1,10 @@
 import { DealQualification } from '@/components/crm/DealQualification';
 import { LossReasonModal } from '@/components/crm/deals/LossReasonModal';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
+import { DealActivityTimeline } from '@/components/crm/dealDetail/DealActivityTimeline';
+import { DealCompanyCard } from '@/components/crm/dealDetail/DealCompanyCard';
+import { DealContactCard } from '@/components/crm/dealDetail/DealContactCard';
+import { DealDetailHeader } from '@/components/crm/dealDetail/DealDetailHeader';
+import { DealDetailsCard } from '@/components/crm/dealDetail/DealDetailsCard';
 import { invalidateActivities } from '@/hooks/useActivities';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useContacts } from '@/hooks/useContacts';
@@ -26,25 +18,14 @@ import {
   type Activity,
   type ActivityType,
 } from '@/lib/data';
-import { ACTIVITY_TYPE, ACTIVITY_TYPES } from '@/lib/domain';
-import { formatCurrency, formatDate, formatDateTime, formatMonthYear } from '@/lib/format';
-import {
-  ArrowLeft,
-  Building2,
-  Calendar,
-  Check,
-  Edit2,
-  Percent,
-  RotateCcw,
-  Trophy,
-  User,
-  X,
-  XCircle,
-} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
+// Orquestrador: busca/deriva os dados (deal, contato, empresa, estágios,
+// atividades) e delega toda a renderização visual para
+// components/crm/dealDetail/** (Masia Clone-Template Audit Framework
+// §4/§6.1 — "God Component" split, ver Auditoria Geral 2026-07-07 §5).
 export default function DealDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -62,20 +43,8 @@ export default function DealDetailScreen() {
   const [deal, setDeal] = useState(dealFromCache);
   const [activities, setActivities] = useState<Activity[]>([]);
 
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState('');
-  const [editingValue, setEditingValue] = useState(false);
-  const [valueDraft, setValueDraft] = useState('');
-  const [currencyDraft, setCurrencyDraft] = useState('BRL');
-
   const [lossModalOpen, setLossModalOpen] = useState(false);
   const [lossForm, setLossForm] = useState({ reason: '' });
-
-  const [activityForm, setActivityForm] = useState({
-    type: 'note' as ActivityType,
-    title: '',
-    body: '',
-  });
   const [statusActionPending, setStatusActionPending] = useState(false);
 
   useEffect(() => {
@@ -85,9 +54,6 @@ export default function DealDetailScreen() {
       return;
     }
     setDeal(dealFromCache);
-    setTitleDraft(dealFromCache.title);
-    setValueDraft(String(dealFromCache.value || 0));
-    setCurrencyDraft(dealFromCache.currency || 'BRL');
   }, [dealFromCache, dealsLoading, navigate]);
 
   const fetchActivities = useCallback(async () => {
@@ -133,20 +99,16 @@ export default function DealDetailScreen() {
   const orderedStages = [...stages].sort((a, b) => a.sort_order - b.sort_order);
   const currentStageIndex = orderedStages.findIndex((s) => s.id === deal.stage_id);
 
-  const saveTitle = async () => {
-    if (!titleDraft.trim()) return;
-    await updateDeal(deal.id, { title: titleDraft });
-    setDeal({ ...deal, title: titleDraft });
-    setEditingTitle(false);
+  const saveTitle = async (title: string) => {
+    await updateDeal(deal.id, { title });
+    setDeal({ ...deal, title });
     refreshDeals();
     toast.success('Título atualizado');
   };
 
-  const saveValue = async () => {
-    const val = Number(valueDraft) || 0;
-    await updateDeal(deal.id, { value: val, currency: currencyDraft });
-    setDeal({ ...deal, value: val, currency: currencyDraft });
-    setEditingValue(false);
+  const saveValue = async (value: number, currency: string) => {
+    await updateDeal(deal.id, { value, currency });
+    setDeal({ ...deal, value, currency });
     refreshDeals();
     toast.success('Valor atualizado');
   };
@@ -210,15 +172,13 @@ export default function DealDetailScreen() {
   };
 
   // owner_id setado pelo gateway — não enviar.
-  const addActivity = async () => {
-    if (!activityForm.title) return;
+  const addActivity = async (activity: { type: ActivityType; title: string; body: string }) => {
     await createActivity({
       deal_id: deal.id,
-      type: activityForm.type,
-      title: activityForm.title,
-      body: activityForm.body || null,
+      type: activity.type,
+      title: activity.title,
+      body: activity.body || null,
     });
-    setActivityForm({ type: 'note', title: '', body: '' });
     fetchActivities();
     invalidateActivities();
     toast.success('Atividade adicionada');
@@ -226,266 +186,26 @@ export default function DealDetailScreen() {
 
   return (
     <div className="space-y-6">
-      <button
-        onClick={() => navigate('/deals')}
-        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Voltar para Negócios
-      </button>
-
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-2">
-          {/* Título */}
-          {editingTitle ? (
-            <div className="flex items-center gap-1">
-              <Input
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-                className="text-xl font-bold h-auto py-0.5"
-                autoFocus
-                onKeyDown={(e) => e.key === 'Enter' && saveTitle()}
-              />
-              <button onClick={saveTitle} className="shrink-0 text-success">
-                <Check className="h-5 w-5" />
-              </button>
-              <button
-                onClick={() => {
-                  setEditingTitle(false);
-                  setTitleDraft(deal.title);
-                }}
-                className="shrink-0 text-muted-foreground"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-          ) : (
-            <h1
-              className="text-xl font-bold tracking-tight group cursor-pointer sm:text-2xl"
-              onClick={() => setEditingTitle(true)}
-            >
-              {deal.title}
-              <Edit2 className="ml-2 inline h-4 w-4 opacity-0 group-hover:opacity-50 transition-opacity" />
-            </h1>
-          )}
-
-          {/* Valor + estágio + saúde — wrap no mobile */}
-          <div className="flex flex-wrap items-center gap-2">
-            {editingValue ? (
-              <>
-                <Select value={currencyDraft} onValueChange={setCurrencyDraft}>
-                  <SelectTrigger className="w-20 h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BRL">BRL</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  value={valueDraft}
-                  onChange={(e) => setValueDraft(e.target.value)}
-                  className="w-28 h-8"
-                  autoFocus
-                  onKeyDown={(e) => e.key === 'Enter' && saveValue()}
-                />
-                <button onClick={saveValue} className="text-success">
-                  <Check className="h-4 w-4" />
-                </button>
-                <button onClick={() => setEditingValue(false)} className="text-muted-foreground">
-                  <X className="h-4 w-4" />
-                </button>
-              </>
-            ) : (
-              <span
-                className="text-lg font-bold text-primary cursor-pointer hover:opacity-80 sm:text-xl"
-                onClick={() => setEditingValue(true)}
-              >
-                {formatCurrency(deal.value, deal.currency || 'BRL')}
-              </span>
-            )}
-
-            <Select
-              value={deal.stage_id || ''}
-              onValueChange={changeStage}
-              disabled={deal.status !== 'open'}
-            >
-              <SelectTrigger className="h-8 w-40">
-                <div className="flex items-center gap-1.5">
-                  {currentStage?.color && (
-                    <div
-                      className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: currentStage.color }}
-                    />
-                  )}
-                  <SelectValue />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                {orderedStages.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <div className="flex items-center gap-1.5">
-              <div className={`h-2 w-2 rounded-full ${healthColor}`} />
-              <span className="text-xs text-muted-foreground">{healthLabel}</span>
-            </div>
-
-            {deal.status !== 'open' && (
-              <Badge
-                variant="secondary"
-                className={
-                  deal.status === 'won'
-                    ? 'bg-success/10 text-success'
-                    : 'bg-destructive/10 text-destructive'
-                }
-              >
-                {deal.status === 'won' ? 'Ganho' : 'Perdido'}
-              </Badge>
-            )}
-          </div>
-        </div>
-
-        <div className="flex shrink-0 gap-2">
-          {deal.status !== 'won' && (
-            <Button
-              variant="outline"
-              onClick={markAsWon}
-              disabled={statusActionPending}
-              className="flex-1 text-success border-success/30 hover:bg-success/10 sm:flex-none"
-            >
-              <Trophy className="mr-2 h-4 w-4" />
-              Ganho
-            </Button>
-          )}
-          {deal.status !== 'lost' && (
-            <Button
-              variant="outline"
-              onClick={openLossModal}
-              disabled={statusActionPending}
-              className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10 sm:flex-none"
-            >
-              <XCircle className="mr-2 h-4 w-4" />
-              Perdido
-            </Button>
-          )}
-          {deal.status !== 'open' && (
-            <Button
-              variant="outline"
-              onClick={reopenDeal}
-              disabled={statusActionPending}
-              className="flex-1 text-muted-foreground border-border hover:bg-muted sm:flex-none"
-            >
-              <RotateCcw className="mr-2 h-4 w-4" />
-              Reabrir
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Pipeline progress bar */}
-      <div className="flex gap-1">
-        {orderedStages.map((s, i) => (
-          <div
-            key={s.id}
-            className={`h-2 flex-1 rounded-full transition-colors cursor-pointer ${
-              i <= currentStageIndex
-                ? deal.status === 'won'
-                  ? 'bg-success'
-                  : deal.status === 'lost'
-                    ? 'bg-destructive'
-                    : 'bg-primary'
-                : 'bg-muted'
-            }`}
-            onClick={() => deal.status === 'open' && changeStage(s.id)}
-            title={s.name}
-          />
-        ))}
-      </div>
+      <DealDetailHeader
+        deal={deal}
+        currentStage={currentStage}
+        orderedStages={orderedStages}
+        currentStageIndex={currentStageIndex}
+        healthColor={healthColor}
+        healthLabel={healthLabel}
+        statusActionPending={statusActionPending}
+        onBack={() => navigate('/deals')}
+        onSaveTitle={saveTitle}
+        onSaveValue={saveValue}
+        onChangeStage={changeStage}
+        onMarkWon={markAsWon}
+        onOpenLossModal={openLossModal}
+        onReopenDeal={reopenDeal}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main content: Timeline */}
-        <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">Adicionar Atividade</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex gap-2">
-                <Select
-                  value={activityForm.type}
-                  onValueChange={(v) =>
-                    setActivityForm({ ...activityForm, type: v as ActivityType })
-                  }
-                >
-                  <SelectTrigger className="w-32 h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ACTIVITY_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {ACTIVITY_TYPE[t].label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  className="h-8 text-sm"
-                  placeholder="Título"
-                  value={activityForm.title}
-                  onChange={(e) => setActivityForm({ ...activityForm, title: e.target.value })}
-                />
-              </div>
-              <Textarea
-                placeholder="Descrição (opcional)"
-                value={activityForm.body}
-                onChange={(e) => setActivityForm({ ...activityForm, body: e.target.value })}
-                rows={2}
-                className="text-sm"
-              />
-              <Button size="sm" onClick={addActivity} disabled={!activityForm.title}>
-                Adicionar
-              </Button>
-            </CardContent>
-          </Card>
+        <DealActivityTimeline activities={activities} onAdd={addActivity} />
 
-          <div className="space-y-1">
-            {activities.map((a) => {
-              const Icon = ACTIVITY_TYPE[a.type].icon;
-              return (
-                <div key={a.id} className="flex gap-3 rounded-lg border border-border p-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                    <Icon className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {ACTIVITY_TYPE[a.type].label}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatDateTime(a.created_at)}
-                      </span>
-                    </div>
-                    <p className="text-sm font-medium">{a.title}</p>
-                    {a.body && <p className="mt-1 text-sm text-muted-foreground">{a.body}</p>}
-                  </div>
-                </div>
-              );
-            })}
-            {activities.length === 0 && (
-              <div className="py-10 text-center text-muted-foreground text-sm">
-                Nenhuma atividade registrada
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right sidebar */}
         <div className="space-y-4">
           <DealQualification
             dealId={deal.id}
@@ -494,90 +214,9 @@ export default function DealDetailScreen() {
             isLateStage={currentStageIndex >= Math.max(0, orderedStages.length - 2)}
             onUpdate={refreshDeals}
           />
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <User className="h-4 w-4" />
-                Contato
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {contact ? (
-                <div className="flex items-center gap-2">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                      {contact.first_name[0]}
-                      {contact.last_name?.[0]}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="text-sm font-medium">
-                      {contact.first_name} {contact.last_name}
-                    </p>
-                    {contact.email && (
-                      <p className="text-xs text-muted-foreground">{contact.email}</p>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Nenhum contato vinculado</p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <Building2 className="h-4 w-4" />
-                Empresa
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {company ? (
-                <div>
-                  <p className="text-sm font-medium">{company.name}</p>
-                  {company.domain && (
-                    <p className="text-xs text-muted-foreground">{company.domain}</p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Nenhuma empresa vinculada</p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Detalhes</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <Calendar className="h-3.5 w-3.5" />
-                  Fechamento
-                </span>
-                <span className="capitalize">{formatMonthYear(deal.close_date)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <Percent className="h-3.5 w-3.5" />
-                  Probabilidade
-                </span>
-                <span>{deal.probability || 0}%</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Criado em</span>
-                <span>{formatDate(deal.created_at)}</span>
-              </div>
-              {deal.status === 'lost' && deal.loss_reason && (
-                <div className="mt-2 rounded-md bg-destructive/10 p-2">
-                  <p className="text-xs font-medium text-destructive">Motivo da perda:</p>
-                  <p className="text-xs text-destructive/80">{deal.loss_reason}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <DealContactCard contact={contact} />
+          <DealCompanyCard company={company} />
+          <DealDetailsCard deal={deal} />
         </div>
       </div>
 

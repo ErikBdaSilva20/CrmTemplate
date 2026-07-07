@@ -3,24 +3,31 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { X, Flame } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
+import { PeriodSelect } from '@/components/crm/PeriodSelect';
+import type { Period } from '@/lib/period';
 
 // Filtro de "Responsável" removido: no modo genérico não há diretório de usuários
 // e o rep só enxerga os próprios registros (isolamento no gateway).
 export interface DealFilters {
   minValue?: number;
   maxValue?: number;
-  closeDateFrom?: string;
-  closeDateTo?: string;
   onlyHot?: boolean;
 }
 
 interface DealsFiltersProps {
   filters: DealFilters;
   onFiltersChange: (f: DealFilters) => void;
+  period: Period;
+  onPeriodChange: (period: Period) => void;
 }
 
-export function DealsFilters({ filters, onFiltersChange }: DealsFiltersProps) {
-  const hasFilters = Object.values(filters).some((v) => v !== undefined && v !== '');
+const DEFAULT_PERIOD: Period = { kind: 'preset', preset: 'all' };
+
+export function DealsFilters({ filters, onFiltersChange, period, onPeriodChange }: DealsFiltersProps) {
+  const hasFilters =
+    Object.values(filters).some((v) => v !== undefined && v !== '') ||
+    period.kind !== 'preset' ||
+    period.preset !== 'all';
 
   return (
     <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-muted/30 p-3">
@@ -57,27 +64,8 @@ export function DealsFilters({ filters, onFiltersChange }: DealsFiltersProps) {
       </div>
 
       <div className="space-y-1">
-        <Label className="text-xs">Fechamento de</Label>
-        <Input
-          type="date"
-          className="w-36 h-8 text-xs"
-          value={filters.closeDateFrom ?? ''}
-          onChange={(e) =>
-            onFiltersChange({ ...filters, closeDateFrom: e.target.value || undefined })
-          }
-        />
-      </div>
-
-      <div className="space-y-1">
-        <Label className="text-xs">até</Label>
-        <Input
-          type="date"
-          className="w-36 h-8 text-xs"
-          value={filters.closeDateTo ?? ''}
-          onChange={(e) =>
-            onFiltersChange({ ...filters, closeDateTo: e.target.value || undefined })
-          }
-        />
+        <Label className="text-xs">Fechamento</Label>
+        <PeriodSelect value={period} onChange={onPeriodChange} />
       </div>
 
       <div className="flex items-center gap-2 h-8 px-2 mt-auto mb-0.5 rounded-md bg-orange-500/10 border border-orange-500/20">
@@ -97,7 +85,10 @@ export function DealsFilters({ filters, onFiltersChange }: DealsFiltersProps) {
           variant="ghost"
           size="sm"
           className="h-8 text-xs text-muted-foreground"
-          onClick={() => onFiltersChange({})}
+          onClick={() => {
+            onFiltersChange({});
+            onPeriodChange(DEFAULT_PERIOD);
+          }}
         >
           <X className="mr-1 h-3 w-3" />
           Limpar

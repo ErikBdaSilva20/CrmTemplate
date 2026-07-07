@@ -31,22 +31,25 @@ import {
   createActivity, updateActivity, deleteActivity, toggleTaskDone,
   type Activity, type ActivityUpdate,
 } from "@/lib/data";
-import { startOfDay, endOfDay, getWeekRange } from "@/lib/date";
 import { dueDateForBucket, type TaskBucket } from "@/lib/tasks";
+import { filterByBucket, countByBucket, type OperationalBucket } from "@/lib/activityBuckets";
+import { isInInterval, resolvePeriod, type Period } from "@/lib/period";
 import { formatDateShort } from "@/lib/format";
 import { SegmentedToggle } from "@/components/ui/segmented-toggle";
+import { BucketTabs } from "@/components/crm/BucketTabs";
+import { PeriodSelect } from "@/components/crm/PeriodSelect";
 type ViewMode = "list" | "kanban";
 
-type DateFilter = "todo" | "overdue" | "today" | "tomorrow" | "this_week" | "done";
+type DateFilter = Exclude<OperationalBucket, "next_week" | "next_30_days">;
 
-const dateFilterLabels: Record<DateFilter, string> = {
-  todo: "Para fazer",
-  overdue: "Vencidas",
-  today: "Hoje",
-  tomorrow: "Amanhã",
-  this_week: "Esta semana",
-  done: "Concluídas",
-};
+const BUCKETS: { key: DateFilter; label: string }[] = [
+  { key: "todo", label: "Para fazer" },
+  { key: "overdue", label: "Vencidas" },
+  { key: "today", label: "Hoje" },
+  { key: "tomorrow", label: "Amanhã" },
+  { key: "this_week", label: "Esta semana" },
+  { key: "done", label: "Concluídas" },
+];
 
 export default function TasksScreen() {
   const { data: activitiesRaw, refresh: refreshActivities } = useActivities();
@@ -73,6 +76,9 @@ export default function TasksScreen() {
 
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [dateFilter, setDateFilter] = useState<DateFilter>("todo");
+  // Período analítico (FR-16) — "Tudo" preserva o comportamento atual (zero
+  // recorte por Período) até o usuário escolher um.
+  const [period, setPeriod] = useState<Period>({ kind: "preset", preset: "all" });
   const [createOpen, setCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState<Activity | null>(null);
 
@@ -119,53 +125,21 @@ export default function TasksScreen() {
 
   const isOverdue = (t: Activity) => !t.completed_at && t.due_date && new Date(t.due_date) < new Date();
 
+  const periodInterval = useMemo(() => resolvePeriod(period), [period]);
+
+  // Bucket (src/lib/activityBuckets.ts) filtra por due_date — operacional,
+  // "o que fazer agora". Período (src/lib/period.ts) filtra por created_at —
+  // analítico, "como foi o intervalo X" (FR-16, Glossário do PRD §3). Os
+  // dois participam aqui, lado a lado, como condições independentes.
   const filtered = useMemo(() => {
-    const now = new Date();
-    const todayStart = startOfDay(now);
-    const todayEnd = endOfDay(now);
-    const tomorrowStart = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
-    const tomorrowEnd = endOfDay(tomorrowStart);
-    const thisWeek = getWeekRange();
+    const byBucket = filterByBucket(tasks, dateFilter);
+    return byBucket.filter((t) => isInInterval(t.created_at, periodInterval));
+  }, [tasks, dateFilter, periodInterval]);
 
-    return tasks.filter((t) => {
-      const dueDate = t.due_date ? new Date(t.due_date) : null;
-      switch (dateFilter) {
-        case "todo":
-          return !t.completed_at;
-        case "overdue":
-          return !t.completed_at && dueDate !== null && dueDate < now;
-        case "today":
-          return !t.completed_at && dueDate !== null && dueDate >= todayStart && dueDate <= todayEnd;
-        case "tomorrow":
-          return !t.completed_at && dueDate !== null && dueDate >= tomorrowStart && dueDate <= tomorrowEnd;
-        case "this_week":
-          return !t.completed_at && dueDate !== null && dueDate >= thisWeek.start && dueDate <= thisWeek.end;
-        case "done":
-          return !!t.completed_at;
-      }
-      return true;
-    });
-  }, [tasks, dateFilter]);
-
-  const counts = useMemo(() => {
-    const now = new Date();
-    const todayStart = startOfDay(now);
-    const todayEnd = endOfDay(now);
-    const tomorrowStart = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
-    const tomorrowEnd = endOfDay(tomorrowStart);
-    const thisWeek = getWeekRange();
-
-    const base = tasks.filter((t) => !t.completed_at);
-
-    return {
-      todo: base.length,
-      overdue: base.filter((t) => t.due_date && new Date(t.due_date) < now).length,
-      today: base.filter((t) => t.due_date && new Date(t.due_date) >= todayStart && new Date(t.due_date) <= todayEnd).length,
-      tomorrow: base.filter((t) => t.due_date && new Date(t.due_date) >= tomorrowStart && new Date(t.due_date) <= tomorrowEnd).length,
-      this_week: base.filter((t) => t.due_date && new Date(t.due_date) >= thisWeek.start && new Date(t.due_date) <= thisWeek.end).length,
-      done: tasks.filter((t) => !!t.completed_at).length,
-    };
-  }, [tasks]);
+  const counts = useMemo(
+    () => countByBucket(tasks, ["todo", "overdue", "today", "tomorrow", "this_week", "done"]),
+    [tasks],
+  ) as Record<DateFilter, number>;
 
   const openCreate = () => {
     setFormTitle("");
@@ -254,33 +228,13 @@ export default function TasksScreen() {
 
       {viewMode === "list" && (
         <>
-      {/* Date filter tabs */}
-      <div className="flex items-center gap-0.5 py-2 text-xs flex-wrap">
-        {(Object.keys(dateFilterLabels) as DateFilter[]).map((key) => {
-          const count = counts[key];
-          const isActive = dateFilter === key;
-          const isOverdueTab = key === "overdue";
-          return (
-            <button
-              key={key}
-              onClick={() => setDateFilter(key)}
-              className={`px-3 py-1 rounded-md font-medium transition-colors ${
-                isActive
-                  ? isOverdueTab && count > 0
-                    ? "bg-destructive/10 text-destructive"
-                    : "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-            >
-              {dateFilterLabels[key]}
-              {count > 0 && (
-                <span className={`ml-1 text-[10px] ${isOverdueTab ? "text-destructive" : ""}`}>
-                  ({count})
-                </span>
-              )}
-            </button>
-          );
-        })}
+      {/* Date filter tabs + Período analítico */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <BucketTabs buckets={BUCKETS} counts={counts} value={dateFilter} onChange={setDateFilter} destructiveKey="overdue" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-medium text-muted-foreground">Período</span>
+          <PeriodSelect value={period} onChange={setPeriod} />
+        </div>
       </div>
 
       {/* Table */}

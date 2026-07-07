@@ -1,8 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrencyCompact as fmt } from '@/lib/format';
-import type { MonthlyRevenuePoint } from '@/lib/analytics';
 import { Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { tooltipStyle } from './chartTheme';
+
+// Forma de dado do gráfico de receita mensal — puramente de exibição (não é
+// um conceito de Período reutilizável por outras telas, por isso vive aqui
+// e não em src/lib/period.ts ou periodAggregation.ts).
+export interface MonthlyRevenuePoint {
+  month: string;
+  receita: number;
+  tendencia: number;
+}
 
 interface GaugeChartProps {
   value: number;
@@ -50,20 +58,24 @@ function GaugeChart({ value, max, label }: GaugeChartProps) {
 
 interface RevenueSectionProps {
   monthlyRevenue: MonthlyRevenuePoint[];
-  wonRevenue: number;
-  monthlyGoal: number;
+  /** Título do card de receita, já refletindo o Período ativo (ex: "Receita Mensal — 2025", "Receita Mensal — Últimos 12 meses (contexto)"). */
+  title: string;
+  /** Rótulo do card de meta — "Meta do Mês" ou "Meta do Ano" (Visão Anual, FR-8), já resolvido por quem chama. */
+  goalLabel: string;
+  goalValue: number;
+  goalTarget: number;
 }
 
-// Receita mensal (12 meses) + meta do mês vivem juntas porque são a mesma
-// métrica (receita do período) vista de duas formas — tendência histórica e
+// Receita mensal (12 meses) + meta vivem juntas porque são a mesma métrica
+// (receita do período) vista de duas formas — tendência histórica e
 // progresso da meta atual — diferente dos outros pares lado a lado no
 // Dashboard, que só compartilham a linha do grid por layout, não por domínio.
-export function RevenueSection({ monthlyRevenue, wonRevenue, monthlyGoal }: RevenueSectionProps) {
+export function RevenueSection({ monthlyRevenue, title, goalLabel, goalValue, goalTarget }: RevenueSectionProps) {
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       <Card className="lg:col-span-2">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Receita Mensal (últimos 12 meses)</CardTitle>
+          <CardTitle className="text-sm">{title}</CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={260}>
@@ -98,10 +110,10 @@ export function RevenueSection({ monthlyRevenue, wonRevenue, monthlyGoal }: Reve
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Meta do Mês</CardTitle>
+          <CardTitle className="text-sm">{goalLabel}</CardTitle>
         </CardHeader>
         <CardContent className="flex items-center justify-center">
-          <GaugeChart value={wonRevenue} max={monthlyGoal} label={fmt(monthlyGoal)} />
+          <GaugeChart value={goalValue} max={goalTarget} label={fmt(goalTarget)} />
         </CardContent>
       </Card>
     </div>
