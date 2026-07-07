@@ -1,15 +1,13 @@
 import { db } from "./client";
 import type { Database } from "./types.gen";
+import { normalizeNumericFields } from "./normalize";
 
 export type SalesGoal = Database["public"]["Tables"]["sales_goals"]["Row"];
 export type SalesGoalInsert = Database["public"]["Tables"]["sales_goals"]["Insert"];
 export type SalesGoalUpdate = Database["public"]["Tables"]["sales_goals"]["Update"];
 
-// target_value/current_value are Postgres `numeric` — can arrive as strings
-// over the gateway's JSON despite the generated `number` type. Normalize
-// once here (see Masia Clone-Template Audit Framework §7).
-function normalizeSalesGoal(g: SalesGoal): SalesGoal {
-  return { ...g, target_value: Number(g.target_value) || 0, current_value: Number(g.current_value) || 0 };
+export function normalizeSalesGoal(g: SalesGoal): SalesGoal {
+  return normalizeNumericFields(g, ["target_value", "current_value"]);
 }
 
 export const listSalesGoals = async () =>

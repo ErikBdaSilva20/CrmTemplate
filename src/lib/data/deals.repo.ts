@@ -2,6 +2,7 @@ import { db } from "./client";
 import type { Database } from "./types.gen";
 import type { Contact } from "./contacts.repo";
 import type { Company } from "./companies.repo";
+import { normalizeNumericFields } from "./normalize";
 
 export type Deal = Database["public"]["Tables"]["deals"]["Row"];
 export type DealInsert = Database["public"]["Tables"]["deals"]["Insert"];
@@ -13,12 +14,8 @@ export type DealWithRelations = Deal & {
   company?: Company | null;
 };
 
-// Postgres `numeric` columns (value, probability) can round-trip through the
-// gateway's JSON serialization as strings even though types.gen.ts declares
-// them as `number` — normalize once here instead of every call site doing
-// `Number(deal.value) || 0` (see Masia Clone-Template Audit Framework §7).
 function normalizeDeal(d: Deal): Deal {
-  return { ...d, value: Number(d.value) || 0, probability: Number(d.probability) || 0 };
+  return normalizeNumericFields(d, ["value", "probability"]);
 }
 
 export const listDeals = async () => (await db.table<Deal>("deals").list()).map(normalizeDeal);

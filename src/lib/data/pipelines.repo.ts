@@ -1,6 +1,7 @@
 import { db } from "./client";
 import type { Database } from "./types.gen";
 import { DEFAULT_STAGES } from "@/lib/constants";
+import { normalizeNumericFields } from "./normalize";
 
 // Lookups (config): admin/manager escreve, rep só lê. Sem owner_id.
 export type Pipeline = Database["public"]["Tables"]["pipelines"]["Row"];
@@ -18,11 +19,8 @@ export const updatePipeline = (id: string, patch: PipelineUpdate) =>
   db.table<Pipeline>("pipelines").update(id, patch);
 export const deletePipeline = (id: string) => db.table<Pipeline>("pipelines").remove(id);
 
-// win_probability is Postgres `numeric` — can arrive as a string over the
-// gateway's JSON despite the generated `number` type. Normalize once here
-// (see Masia Clone-Template Audit Framework §7).
-function normalizeStage(s: PipelineStage): PipelineStage {
-  return { ...s, win_probability: Number(s.win_probability) || 0 };
+export function normalizeStage(s: PipelineStage): PipelineStage {
+  return normalizeNumericFields(s, ["win_probability"]);
 }
 
 export const listStages = async () =>

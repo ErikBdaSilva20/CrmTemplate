@@ -1,15 +1,16 @@
 import { db } from "./client";
 import type { Database } from "./types.gen";
+import { coerceNumeric } from "./normalize";
 
 export type Company = Database["public"]["Tables"]["companies"]["Row"];
 export type CompanyInsert = Database["public"]["Tables"]["companies"]["Insert"];
 export type CompanyUpdate = Database["public"]["Tables"]["companies"]["Update"];
 
-// `revenue` is Postgres `numeric`, nullable — can arrive as a string over the
-// gateway's JSON despite the generated `number | null` type. Normalize once
-// here (see Masia Clone-Template Audit Framework §7).
-function normalizeCompany(c: Company): Company {
-  return { ...c, revenue: c.revenue == null ? null : Number(c.revenue) || 0 };
+// `revenue` is nullable (unlike the other repos' numeric columns) — null must
+// stay null instead of coercing to 0, so this branches instead of using
+// normalizeNumericFields directly (see ./normalize.ts).
+export function normalizeCompany(c: Company): Company {
+  return { ...c, revenue: c.revenue == null ? null : coerceNumeric(c.revenue) };
 }
 
 // owner_id NUNCA é enviado do front — o gateway o seta pela sessão.
